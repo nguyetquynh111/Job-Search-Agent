@@ -1,0 +1,1 @@
+"""Persistent candidate memory."""

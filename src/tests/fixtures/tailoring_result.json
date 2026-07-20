@@ -1,0 +1,9 @@
+{
+  "job_id": "J001",
+  "status": "ok",
+  "output_tex_path": "outputs/J001-resume.tex",
+  "output_pdf_path": "outputs/J001-resume.pdf",
+  "page_count": 1,
+  "change_log": [],
+  "errors": []
+}

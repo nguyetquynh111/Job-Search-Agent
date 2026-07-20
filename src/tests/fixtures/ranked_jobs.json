@@ -1,0 +1,22 @@
+{
+  "ranked_jobs": [
+    {
+      "job": {
+        "job_id": "J001",
+        "title": "Machine Learning Engineer",
+        "company": "Northstar Health",
+        "location": "Remote",
+        "remote": true,
+        "description": "Build ML pipelines.",
+        "requirements": ["Python"],
+        "salary_min": 100000,
+        "salary_max": 130000,
+        "source": "fixture"
+      },
+      "score": 91,
+      "rationale": "fixture",
+      "evidence_ids": ["resume-001"]
+    }
+  ],
+  "top_3_job_ids": ["J001"]
+}

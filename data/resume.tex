@@ -1,0 +1,124 @@
+\documentclass[letterpaper,11pt]{article}
+
+\usepackage[empty]{fullpage}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage[english]{babel}
+\usepackage{tabularx}
+
+\pagestyle{empty}
+\raggedbottom
+\raggedright
+\setlength{\tabcolsep}{0in}
+
+\addtolength{\oddsidemargin}{-0.5in}
+\addtolength{\evensidemargin}{-0.5in}
+\addtolength{\textwidth}{1in}
+\addtolength{\topmargin}{-0.6in}
+\addtolength{\textheight}{1.2in}
+
+\titleformat{\section}{\large\bfseries\scshape\raggedright}{}{0em}{}[\titlerule]
+\titlespacing*{\section}{0pt}{8pt}{4pt}
+
+\newcommand{\resumeItem}[1]{\item\small{#1}}
+\newcommand{\resumeEntry}[4]{
+  \item
+  \begin{tabular*}{\textwidth}[t]{l@{\extracolsep{\fill}}r}
+    \textbf{#1} & #2 \\
+    \textit{\small#3} & \textit{\small#4} \\
+  \end{tabular*}\vspace{-4pt}
+}
+\newcommand{\resumeItemListStart}{\begin{itemize}[leftmargin=0.2in, itemsep=1pt]}
+\newcommand{\resumeItemListEnd}{\end{itemize}\vspace{2pt}}
+\newcommand{\resumeEntryListStart}{\begin{itemize}[leftmargin=0.0in, label={}, itemsep=2pt]}
+\newcommand{\resumeEntryListEnd}{\end{itemize}}
+
+\begin{document}
+
+%----------HEADER----------
+\begin{center}
+    {\Huge \scshape Avery Morgan} \\ \vspace{2pt}
+    Houston, TX $|$ 713-555-0148 $|$
+    \href{mailto:avery.morgan.ai@example.com}{avery.morgan.ai@example.com} $|$
+    \href{https://github.com/avery-morgan-ai}{github.com/avery-morgan-ai}
+\end{center}
+
+%----------SUMMARY----------
+\section{Professional Summary}
+% AGENT-EDIT-TARGET: summary
+AI/ML engineer and Ph.D. researcher with 4+ years building production ML, generative-AI, and biomedical-vision systems. Delivered a 1.7M-record visual-QC workflow, 95\% resume-parser accuracy, 80\% job-matching success, and approximately 95\% accuracy/F1 for real-time fall detection.
+
+%----------EDUCATION----------
+\section{Education}
+\resumeEntryListStart
+  \resumeEntry{Gulfview Technical University}{Houston, TX}
+    {Ph.D. Student, Electrical and Computer Engineering}{2025 -- Present}
+  \resumeEntry{Pacifica Institute of Science}{Houston, TX}
+    {M.S. Data Science (3.64/4.0) $|$ B.S. Math \& Computer Science (3.44/4.0)}{2021--2023 $|$ 2017--2021}
+\resumeEntryListEnd
+
+%----------EXPERIENCE----------
+\section{Experience}
+\resumeEntryListStart
+
+  \resumeEntry{Graduate Research Assistant}{Jul. 2025 -- Present}
+    {Gulfview Technical University}{Houston, TX}
+  \resumeItemListStart
+    % AGENT-EDIT-TARGET: experience-bullet-1
+    \resumeItem{Built a visual-QC workflow over 1.7M segmentation/tracking predictions; achieved 90.5\% test accuracy and 0.764 F1 using out-of-fold evaluation and targeted error analysis.}
+  \resumeItemListEnd
+
+  \resumeEntry{Senior AI Engineer}{Dec. 2024 -- Jun. 2025}
+    {Nimbus AI Products}{Houston, TX}
+  \resumeItemListStart
+    % AGENT-EDIT-TARGET: experience-bullet-2
+    \resumeItem{Delivered an AI CRM and no-code LLM chatbot builder using predictive analytics, RAG, FastAPI, WebSocket, Docker, Kubernetes, and AWS SageMaker.}
+  \resumeItemListEnd
+
+  \resumeEntry{AI \& Data Engineer}{Apr. 2023 -- Nov. 2024}
+    {Meridian Biomedical AI Lab}{Houston, TX}
+  \resumeItemListStart
+    \resumeItem{Built cardiovascular-imaging and real-time fall-detection models; reached approximately 95\% accuracy/F1, optimized embedded inference, and coauthored 2 peer-reviewed publications.}
+  \resumeItemListEnd
+
+  \resumeEntry{AI \& Data Engineer}{Aug. 2021 -- Apr. 2023}
+    {TalentBridge Technologies}{Houston, TX}
+  \resumeItemListStart
+    \resumeItem{Built production resume parsing, candidate-job ranking, and policy-chatbot services, reaching 95\% parser accuracy and 80\% matching success.}
+  \resumeItemListEnd
+
+\resumeEntryListEnd
+
+%----------PROJECTS----------
+% The agent may SWAP any project below with a more relevant one from the
+% portfolio file. Swapped-in projects must be formatted exactly like these.
+\section{Projects}
+\resumeEntryListStart
+
+  % AGENT-SWAP-TARGET: project-1 | PORTFOLIO-ID: P05
+  \resumeEntry{Cardiovascular Flow and Stenosis Analysis}{2023 -- 2024}
+    {PyTorch, R2U Attention, Vision Transformer, OpenCV, DICOM}{Medical Computer Vision}
+  \resumeItemListStart
+    \resumeItem{Combined vessel isolation, catheter exclusion, retrograde-flow detection, stenosis localization, flow-time estimation, and vessel-kink analysis.}
+  \resumeItemListEnd
+
+  % AGENT-SWAP-TARGET: project-2 | PORTFOLIO-ID: P03
+  \resumeEntry{No-Code LLM Chatbot Builder}{2025}
+    {DeepInfra/OpenAI, RAG, AutoGen, crawl4ai, FastAPI, WebSocket}{Generative AI}
+  \resumeItemListStart
+    \resumeItem{Converted website content into retrieval-ready knowledge and exposed context-aware assistants through reusable APIs and real-time channels.}
+  \resumeItemListEnd
+
+\resumeEntryListEnd
+
+%----------SKILLS----------
+\section{Skills}
+% AGENT-EDIT-TARGET: skills
+\begin{itemize}[leftmargin=0.2in, itemsep=1pt]
+  \small\item{\textbf{AI/ML:} Python, PyTorch, TensorFlow, Scikit-learn, OpenCV, Vision Transformers, EfficientNet, RAG, NLP, PaddleOCR}
+  \small\item{\textbf{Production:} FastAPI, REST, WebSocket, Docker, Kubernetes, Airflow, MLflow, Git, AWS SageMaker, Google Cloud}
+  \small\item{\textbf{Data \& Languages:} SQL, PostgreSQL, MySQL, MongoDB, Elasticsearch, Neo4j, Pinecone, Supabase, Rust, Java}
+\end{itemize}
+
+\end{document}

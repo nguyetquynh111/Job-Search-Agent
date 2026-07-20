@@ -1,0 +1,17 @@
+{
+  "accepted_jobs": [
+    {
+      "job_id": "J001",
+      "title": "Machine Learning Engineer",
+      "company": "Northstar Health",
+      "location": "Remote",
+      "remote": true,
+      "description": "Build ML pipelines.",
+      "requirements": ["Python"],
+      "salary_min": 100000,
+      "salary_max": 130000,
+      "source": "fixture"
+    }
+  ],
+  "rejected_jobs": []
+}

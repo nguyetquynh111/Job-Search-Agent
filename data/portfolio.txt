@@ -1,0 +1,172 @@
+PROJECT PORTFOLIO
+Candidate: Avery Morgan
+
+================================================================================
+PROJECT_ID: P01
+PROJECT_NAME: Visual Quality-Control for Segmentation and Tracking
+PERIOD: 2025-Present
+ROLE: Graduate Research Assistant
+ORGANIZATION_ALIAS: Gulfview Technical University
+DOMAIN: AI Research; Biomedical Computer Vision; Model Quality Assurance
+INDUSTRY: Higher Education / Research
+TECH_STACK: Python; PyTorch; EfficientNet; Computer Vision; Out-of-Fold Evaluation; Statistical Error Analysis
+SUMMARY: Built a visual quality-control workflow that prioritizes likely failures among large-scale segmentation and tracking predictions instead of relying on exhaustive manual review.
+CORE_CONTRIBUTIONS:
+- Processed and evaluated 1.7 million segmentation/tracking prediction records.
+- Designed out-of-fold evaluation and targeted error analysis across 3 datasets.
+- Surfaced out-of-focus cases, false positives, missed detections, and label edge cases for reproducible review.
+REPORTED_OUTCOMES:
+- Test accuracy: 90.5%.
+- Test F1: 0.764.
+RESUME_SWAP_VALUE: Strong evidence for computer vision, ML evaluation, model monitoring, quality assurance, and large-scale research workflows.
+KEYWORDS: computer vision; segmentation; tracking; visual QC; OOF; evaluation; error analysis; EfficientNet; biomedical imaging
+
+================================================================================
+PROJECT_ID: P02
+PROJECT_NAME: AI CRM Platform
+PERIOD: 2024-2025
+ROLE: Senior AI Engineer
+ORGANIZATION_ALIAS: Nimbus AI Products
+DOMAIN: Predictive Analytics; NLP; Customer Intelligence
+INDUSTRY: CRM / Sales Technology
+TECH_STACK: Python; DeepInfra; FastAPI; Docker; Kubernetes; AWS SageMaker; NLP; Predictive Analytics; A/B Testing
+SUMMARY: Engineered an AI-powered customer relationship management platform to support sales prioritization and customer engagement.
+CORE_CONTRIBUTIONS:
+- Translated sales, marketing, and product requirements into AI/ML solutions.
+- Developed predictive analytics and segmentation for lead scoring and sales-pipeline prioritization.
+- Added sentiment analysis and automated customer communications.
+- Deployed and scaled models with AWS SageMaker.
+- Performed A/B testing, monitoring, and performance optimization.
+REPORTED_OUTCOMES:
+- No numeric metric reported in the source materials.
+RESUME_SWAP_VALUE: Strong evidence for applied ML, predictive analytics, NLP, cloud deployment, experimentation, and cross-functional product work.
+KEYWORDS: CRM; lead scoring; customer segmentation; sentiment analysis; SageMaker; production ML; A/B testing
+
+================================================================================
+PROJECT_ID: P03
+PROJECT_NAME: No-Code LLM Chatbot Builder
+PERIOD: 2025
+ROLE: Senior AI Engineer
+ORGANIZATION_ALIAS: Nimbus AI Products
+DOMAIN: Generative AI; Retrieval-Augmented Generation; Conversational AI
+INDUSTRY: Customer Service Technology
+TECH_STACK: Python; DeepInfra; OpenAI; RAG; AutoGen; crawl4ai; FastAPI; REST; WebSocket; Docker; Kubernetes
+SUMMARY: Developed a no-code platform that lets users configure AI-powered chatbots with context-aware conversations and reusable deployment channels.
+CORE_CONTRIBUTIONS:
+- Integrated large language models for context-aware natural-language conversations.
+- Imported and processed website content for retrieval-ready knowledge.
+- Exposed chatbots through REST APIs and WebSocket connections for web, messaging, and customer-service integrations.
+- Supported containerized production deployment and monitoring.
+REPORTED_OUTCOMES:
+- No numeric metric reported in the source materials.
+RESUME_SWAP_VALUE: Strong evidence for LLM applications, RAG, agent frameworks, website ingestion, APIs, real-time systems, and deployment.
+KEYWORDS: LLM; generative AI; RAG; AutoGen; crawl4ai; FastAPI; WebSocket; chatbot; API
+
+================================================================================
+PROJECT_ID: P04
+PROJECT_NAME: Intravascular Ultrasound Image Analysis Platform
+PERIOD: 2023-2024
+ROLE: AI Engineer
+ORGANIZATION_ALIAS: Meridian Biomedical AI Lab
+DOMAIN: Deep Learning; Medical Image Segmentation and Classification
+INDUSTRY: Healthcare / Medical Imaging
+TECH_STACK: Python; PyTorch; OpenCV; pydicom; FastAPI; Docker; Kubernetes; Statistical Evaluation
+SUMMARY: Developed a platform for intravascular ultrasound image analysis that automates detection and classification of vascular abnormalities and presents results for clinical review.
+CORE_CONTRIBUTIONS:
+- Designed deep-learning models for IVUS segmentation and classification.
+- Built preprocessing and normalization pipelines for ultrasound data.
+- Collaborated with clinical experts to validate outputs and refine algorithms.
+- Developed an interactive visualization dashboard for analysis results.
+- Performed statistical evaluation and iterative model improvement.
+REPORTED_OUTCOMES:
+- No numeric metric reported in the source materials.
+RESUME_SWAP_VALUE: Strong evidence for medical imaging, PyTorch, data preprocessing, clinical collaboration, visualization, and model validation.
+KEYWORDS: IVUS; ultrasound; segmentation; classification; pydicom; healthcare AI; clinical validation
+
+================================================================================
+PROJECT_ID: P05
+PROJECT_NAME: Cardiovascular Flow and Stenosis Analysis
+PERIOD: 2023-2024
+ROLE: AI and Data Engineer
+ORGANIZATION_ALIAS: Meridian Biomedical AI Lab
+DOMAIN: Medical Computer Vision; Segmentation; Video Classification
+INDUSTRY: Healthcare / Cardiovascular Imaging
+TECH_STACK: Python; PyTorch; R2U Attention; Vision Transformer; OpenCV; DICOM; Docker; Geometry-Based Algorithms
+SUMMARY: Built a clinical-review pipeline that detects and analyzes cardiovascular abnormalities from X-ray medical images and video frames.
+CORE_CONTRIBUTIONS:
+- Segmented heart vessels from DICOM images with R2U Attention models while excluding catheters.
+- Classified retrograde flow from medical video frames.
+- Applied a Vision Transformer with multi-label classification to localize stenosis in vessel-image patches.
+- Estimated flow time from segmented-vessel frames.
+- Detected kinked vessels using angle-based sliding-window algorithms.
+REPORTED_OUTCOMES:
+- No numeric metric reported in the source materials.
+RESUME_SWAP_VALUE: Strong evidence for segmentation, Vision Transformers, medical video, DICOM processing, classical geometry, and end-to-end clinical pipelines.
+KEYWORDS: R2U Attention; Vision Transformer; DICOM; stenosis; retrograde flow; vessel segmentation; medical video
+
+================================================================================
+PROJECT_ID: P06
+PROJECT_NAME: Mammography Screening Platform
+PERIOD: Date not specified in source materials
+ROLE: AI Engineer
+ORGANIZATION_ALIAS: Not specified in source materials
+DOMAIN: Computer Vision; Generative AI; Clinical Decision Support
+INDUSTRY: Healthcare / Radiology
+TECH_STACK: Python; DeepInfra; RAG; Computer Vision; OpenCV; Convolutional Neural Networks; Google Cloud AutoML Vision; A/B Testing
+SUMMARY: Built an AI-powered mammography screening system combining anomaly detection with an LLM-powered assistant for radiologist support.
+CORE_CONTRIBUTIONS:
+- Developed computer-vision algorithms to identify anomalies in mammogram images.
+- Applied convolutional neural networks and optimized the system for sensitivity and specificity.
+- Designed an assistant that interprets results, explains findings, and supports radiologist decisions.
+- Performed model validation, monitoring, and A/B testing.
+- Collaborated with radiologists and healthcare experts to refine diagnostic workflows.
+REPORTED_OUTCOMES:
+- No numeric metric reported in the source materials.
+RESUME_SWAP_VALUE: Strong evidence for multimodal healthcare AI, CNNs, radiology workflows, explainability, RAG, and clinical collaboration.
+KEYWORDS: mammography; radiology; anomaly detection; CNN; RAG; AutoML Vision; clinical decision support
+
+================================================================================
+PROJECT_ID: P07
+PROJECT_NAME: Real-Time Fall Detection Platform
+PERIOD: 2023-2024
+ROLE: AI and Data Engineer
+ORGANIZATION_ALIAS: Meridian Biomedical AI Lab
+DOMAIN: Real-Time Computer Vision; Edge AI; Decentralized Data Systems
+INDUSTRY: Healthcare / Patient Safety
+TECH_STACK: Python; TensorFlow; Computer Vision; Docker; Hyperledger; IPFS; Embedded Inference
+SUMMARY: Developed a real-time fall-detection platform and investigated decentralized storage and tamper-resistant event records for patient-safety workflows.
+CORE_CONTRIBUTIONS:
+- Designed and optimized fall-detection algorithms using sensor and computer-vision inputs.
+- Optimized inference for embedded surveillance environments.
+- Integrated Hyperledger for immutable event records.
+- Used IPFS for decentralized storage of sensor and video data.
+- Tested and optimized the system to reduce false positives.
+REPORTED_OUTCOMES:
+- Approximately 95% accuracy and F1 for real-time fall detection.
+RESUME_SWAP_VALUE: Strong evidence for real-time vision, edge deployment, TensorFlow, privacy-aware system design, blockchain, and measurable model performance.
+KEYWORDS: fall detection; real-time inference; edge AI; TensorFlow; Hyperledger; IPFS; patient safety
+
+================================================================================
+PROJECT_ID: P08
+PROJECT_NAME: AI Recruitment Platform
+PERIOD: 2021-2023
+ROLE: AI and Data Engineer
+ORGANIZATION_ALIAS: TalentBridge Technologies
+DOMAIN: NLP; Information Extraction; Recommendation and Ranking
+INDUSTRY: Recruitment Technology / HR Tech
+TECH_STACK: Python; PyTorch; PaddleOCR; Airflow; FastAPI; DeepInfra; Elasticsearch; Neo4j; Data Visualization
+SUMMARY: Built and maintained production AI services for automated resume extraction, candidate-job matching, and recruitment-policy assistance.
+CORE_CONTRIBUTIONS:
+- Developed a resume parser for structured extraction and organization of resume content.
+- Built a match-score model for aligning candidates with job descriptions.
+- Maintained preprocessing and recurring model refreshes for crawled data.
+- Created statistical analyses and dashboards for product and management stakeholders.
+REPORTED_OUTCOMES:
+- Resume parser accuracy: 95%.
+- Candidate-job matching success: 80%.
+RESUME_SWAP_VALUE: Strong evidence for production NLP, OCR, ranking, data pipelines, graph/search databases, APIs, and measurable business-facing ML outcomes.
+KEYWORDS: resume parsing; job matching; NLP; PaddleOCR; Airflow; FastAPI; Elasticsearch; Neo4j; HR tech
+
+================================================================================
+DOMAINS: Biomedical Computer Vision; Generative AI; NLP; Predictive Analytics; Model Quality Assurance; Real-Time Edge AI
+INDUSTRIES: Healthcare; Higher Education/Research; CRM/Sales Technology; Customer Service Technology; Recruitment Technology

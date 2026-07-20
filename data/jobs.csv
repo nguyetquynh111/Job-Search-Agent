@@ -1,0 +1,331 @@
+Job Title,Company,Industry/Domain,Location,Required Skills,Years of Experience Required,Job Description (10-20 lines; include responsibilities and qualifications),Company Details (2-3 lines about the company),URL
+Data AI Co-op / Internship,BrainPOP,EdTech / Data and Generative AI,"New York, NY (Hybrid)",SQL; Python; Snowflake; dbt; Tableau; Streamlit; CortexAI; prompt evaluation,No explicit years stated; current student or recent graduate eligibility applies,"• Run during the fall 2026 co-op period.
+• Work a full-time weekday schedule with a hybrid New York arrangement.
+• Analyze product, engagement and revenue data in Snowflake.
+• Support Tableau dashboards and convert selected workflows to Streamlit.
+• Build reusable Snowflake or dbt data models.
+• Support the CortexAI semantic layer and structured prompts.
+• Document, test and evaluate AI-assisted analytics workflows.
+• Work with product, data and education stakeholders.
+• Bring working knowledge of SQL and Python.
+• Professional years of experience are not required.","Education-technology company creating digital learning products for schools and families.
+Its data and product teams use analytics and AI to improve learning experiences.",https://job-boards.greenhouse.io/brainpop/jobs/4697549006
+AI Engineer Intern - GenAI Internal Automation - GAIA,Equativ,AdTech / Generative AI,"Paris, France (On-site)",Python; Git; Google ADK; LangChain/LangGraph; Vertex AI; Kubernetes; n8n; MLOps/AIOps; CI/CD; agent workflows,No years stated; internship/student eligibility,"• Join Equativ's GenAI team in Paris for an on-site internship.
+• Help design, develop and deploy internal generative-AI automation.
+• Build production-ready agent workflows for internal use cases.
+• Use Python and Git in the development workflow.
+• Work with Google ADK, LangChain or LangGraph.
+• Use Vertex AI and container or orchestration technology such as Kubernetes.
+• Contribute to n8n-based automation and agentic workflows.
+• Apply MLOps/AIOps, CI/CD and unit-testing practices.
+• Collaborate with a strategic GenAI unit responsible for Equativ's GenAI stack.
+• The accessible posting does not state a years-of-experience minimum.","Independent advertising-technology company operating programmatic advertising products.
+Its engineering and data teams work on privacy-first advertising, AI and large-scale prediction systems.",https://jobs.lever.co/equativ/43f7b6c8-476b-4226-bbec-1e1b3dfb35b2
+Principal Data Science,Fidelity Investments,Financial Services / Decision Science,"Jersey City, NJ",Statistics; machine learning; Python/R/SQL; financial analytics; stakeholder communication; mentoring,"Master's + 10 years, or bachelor's + 12 years","• Lead advanced data-science analysis for financial-services decisions.
+• Develop statistical and machine-learning solutions.
+• Translate complex questions into analytical plans.
+• Present findings and recommendations to business partners.
+• Establish analytical guidelines and technical standards.
+• Mentor junior data scientists and analysts.
+• Collaborate with product, technology and investment stakeholders.
+• Use quantitative methods and modern data-science tools.
+• Hold a relevant bachelor's or master's degree.
+• Bring ten years with a master's degree or twelve years with a bachelor's degree.","Financial-services company providing investment, retirement and brokerage products.
+Its data-science teams develop analytics, decision systems and customer solutions.",https://jobs.fidelity.com/en/jobs/2132120/principal-data-science/
+Summer Intern 2027 - Quantitative Trader,Five Rings,Quantitative Finance / Proprietary Trading,"New York, NY",Mathematics; probability; logical problem solving; quantitative reasoning; communication,No explicit years stated; student role with specified graduation eligibility,"• Complete a nine-week quantitative-trading internship.
+• Participate in structured training on markets, trading and risk.
+• Apply mathematical and logical reasoning to trading problems.
+• Work with mentors on real quantitative projects.
+• Analyze data and simulated or live market scenarios.
+• Collaborate with traders, researchers and other interns.
+• Communicate assumptions, decisions and results clearly.
+• Be enrolled in a quantitatively focused degree program.
+• Meet the graduation-window requirement stated in the posting.
+• Prior finance experience and professional work experience are not required.","New York proprietary trading firm focused on quantitative trading, research and technology.
+Its internships combine structured training, mentorship and project work.",https://job-boards.greenhouse.io/fiveringsllc/jobs/5139668008
+AI Software Intern - Fall 2026,Formlabs,3D Printing / Computer Vision,"Somerville, MA (On-site)",Python; PyTorch or TensorFlow; C++; computer vision; 3D geometry; point clouds; inference optimization,"No explicit years stated; pursuing BS, MS, or PhD","• Work full time on site during the fall 2026 internship term.
+• Design and evaluate ML models for 3D spatial data.
+• Develop computer-vision and time-series systems for print monitoring.
+• Work with point clouds, meshes and voxel representations.
+• Build defect-detection and process-analysis prototypes.
+• Profile and optimize model inference for desktop or cloud use.
+• Collaborate with software and multidisciplinary engineering teams.
+• Use Python with PyTorch or TensorFlow.
+• Apply C++ foundations and geometric-data knowledge.
+• Professional work experience is not required.","Formlabs develops professional 3D-printing hardware, materials and software.
+Its products support prototyping and manufacturing across engineering, healthcare and other industries.",https://careers.formlabs.com/job/8067641/apply/
+"Machine Learning Engineer Internship, May–August",Jane Street,Quantitative Finance / Machine Learning,"New York City, NY",Programming; practical ML models or libraries; experimentation; collaboration; curiosity,No explicit years stated; undergraduate or PhD student eligibility applies,"• Work from May through August in New York City.
+• Join a production machine-learning project needed by Jane Street.
+• Partner with a full-time employee who serves as a mentor.
+• Use large, noisy financial datasets and GPU computing resources.
+• Train, evaluate or optimize machine-learning models and workflows.
+• Contribute production-quality code and technical documentation.
+• Share selected classes and activities with software-engineering interns.
+• Be enrolled as an undergraduate or PhD student.
+• Demonstrate practical ML experience through a model, library or workflow project.
+• Professional full-time experience is not required.","Global quantitative trading and technology firm with an interdisciplinary research culture.
+Its teams apply mathematics, software engineering and machine learning to financial markets.",https://www.janestreet.com/join-jane-street/position/8611307002
+Compiler Engineer - AI Inference - New College Grad 2026,NVIDIA,Semiconductors / AI Systems,"Santa Clara, CA",C++; Python; compilers; GPU architecture; kernel generation; computational graphs; AI inference,No explicit years stated; 2026 new-college-graduate eligibility applies,"• Develop compiler technology for AI inference and training workloads.
+• Work on kernel generation for NVIDIA GPU platforms.
+• Optimize computational graphs and generated code.
+• Analyze correctness and performance across the compiler stack.
+• Collaborate with GPU, compiler and AI-software teams.
+• Contribute production-quality code, tests and documentation.
+• Apply knowledge of algorithms and computer systems.
+• Use strong C++ or Python software-development skills.
+• Bring compiler, GPU-computing or ML-systems coursework or projects.
+• Prior full-time professional experience is not required.","NVIDIA develops accelerated-computing platforms based on GPUs, networking and AI software.
+Its technology supports AI training, inference, simulation and high-performance computing.",https://nvidia.wd5.myworkdayjobs.com/en-US/nvidiaexternalcareersite/job/US-CA-Santa-Clara/Compiler-Engineer--AI-Inference--New-College-Grad-2026_JR2021230
+Strategy & Operations Project Intern - Monetization AI - 2026 Start - MBA,TikTok,Big Tech / AI Monetization,"New York City, NY (Hybrid; at least 3 days/week)",Business analysis; AI/advertising/commerce research; strategy; presentations; cross-functional collaboration,No years stated; MBA student with more than one program year completed,"• Analyze business performance and identify product or growth opportunities.
+• Research AI, advertising, commerce and industry trends.
+• Develop insights and recommendations for product leaders.
+• Support strategic planning, business reviews and leadership presentations.
+• Collaborate with Product, Engineering, Sales, Operations and Data Science.
+• Contribute to short-term projects involving AI-driven advertising opportunities.
+• Work in New York City under a hybrid arrangement.
+• The role requires at least three days per week in the office.
+• Applicants must be enrolled in an MBA with more than one program year completed.
+• Strong analytical, problem-solving and communication skills are required.","Global short-form video platform and technology company.
+Its monetization teams develop advertising products and business strategies using data and AI.",https://lifeattiktok.com/search/7662811565604800773
+"Consultant (Top Secret Clearance, Software Implementation)",Appian,Enterprise Software / Generative AI Consulting,"McLean, VA; work in a cleared facility",Appian platform; object-oriented programming; SQL; APIs; relational data modeling; Agile delivery; active Top Secret clearance,1+ year of software development or technical consulting,"• Work with clients to define business processes and gather functional and technical requirements.
+• Design and build applications on the Appian platform.
+• Create relational data models, interfaces and system integrations.
+• Apply object-oriented programming concepts and SQL.
+• Develop and test APIs and workflow components.
+• Participate in Agile delivery, demonstrations and design reviews.
+• Troubleshoot technical issues and improve application quality.
+• Communicate clearly with client and engineering stakeholders.
+• Maintain an active Top Secret clearance or higher.
+• Bring at least one year of software development or technical consulting experience.","Enterprise software company known for its low-code automation and process platform.
+Its consultants implement applications, data models, integrations and AI-enabled workflows.",https://careers.appian.com/jobs/7837402-consultant--top-secret-clearance--software-implementatio
+AI Software Engineer,Booz Allen Hamilton,Government Technology / AI Software,"Arlington, VA",Python/JavaScript/Rust/Go; production-grade software; AI/ML integration; APIs; cloud; testing; software design; deployment,4+ years writing production-grade applications,"• Design and implement software supporting AI and machine-learning solutions.
+• Translate mission requirements into user-focused technical components.
+• Develop application services and model-integration code.
+• Configure and integrate software in client environments.
+• Write tests and support secure deployment workflows.
+• Collaborate with data scientists, engineers and mission stakeholders.
+• Document designs and operational procedures.
+• Troubleshoot software and integration issues.
+• Write production-grade applications in languages such as Python, JavaScript, Rust or Go.
+• Bring at least four years of production-grade application-development experience.","Technology and management consulting company serving government and commercial clients.
+Its AI and data teams build production analytics, software and mission systems.",https://careers.boozallen.com/careers/JobDetail/Arlington-AI-Software-Engineer-R0244680/127458
+Agentic AI Engineer,Booz Allen Hamilton,Government Technology / Agentic AI,"Annapolis Junction, MD (Hybrid)",LLMs; Python; agent frameworks; prompt engineering; APIs; data science; application development,1+ year in ML engineering or data science,"• Develop applications using large language models.
+• Build agentic workflows that call tools and enterprise services.
+• Create prompts, orchestration logic and evaluation methods.
+• Integrate models with APIs and structured or unstructured data.
+• Test reliability, safety and output quality.
+• Collaborate with software, data and mission teams.
+• Document system behavior and deployment requirements.
+• Support demonstrations and production transition.
+• Bring hands-on LLM application experience.
+• Bring at least one year in ML engineering or data science.","Technology and management consulting company serving government and commercial clients.
+Its AI and data teams build production analytics, software and mission systems.",https://careers.boozallen.com/jobs/JobDetail?jobId=126460
+AI Product Engineer - Private Equity Platform,D. E. Shaw Group,Investment Technology / AI Products,"New York, NY",LLM systems; Python; product engineering; workflow products; APIs; data integration; private-equity workflows,"5+ years relevant experience, including 2+ years in technology product development, 1+ year with workflow products and 1+ year building production LLM systems","• Build AI-enabled products for private-equity investment and operating workflows.
+• Develop and integrate production large-language-model systems.
+• Design user-facing workflow products and supporting services.
+• Translate investment-team needs into reliable technical features.
+• Create APIs, data integrations and evaluation processes.
+• Partner with product, engineering and investment stakeholders.
+• Test model quality, reliability and user value.
+• Maintain production standards for security and observability.
+• Bring at least five years of relevant professional experience.
+• Include at least two years in technology product development, one year with workflow products and one year with production LLM systems.","Global investment and technology firm known for quantitative research and engineering.
+Its teams build AI-enabled platforms, trading systems and internal technology products.",https://www.deshaw.com/careers/ai-product-engineer-private-equity-platform-5637
+"AI Engineer / Data Scientist, AI Experienced Associate",PwC,Professional Services / Applied AI,"Multiple U.S. locations, including New York, Chicago and Boston",Python; data wrangling; AI system design; machine learning; generative AI; client communication,1+ year,"• Design and develop AI-enabled solutions for client business problems.
+• Prepare, clean and analyze structured and unstructured data.
+• Build machine-learning or generative-AI prototypes.
+• Translate business requirements into technical tasks.
+• Support testing, evaluation and documentation of AI systems.
+• Collaborate with consultants, engineers and data scientists.
+• Explain technical findings to non-technical stakeholders.
+• Contribute reusable code and project assets.
+• Hold a relevant technical or quantitative degree.
+• Bring at least one year of relevant professional experience.","Global professional-services network providing assurance, tax and consulting services.
+Its AI teams build data, automation and generative-AI solutions for client and internal use.",https://jobs.us.pwc.com/job/chicago/ai-engineer-data-scientist-ai-experienced-associate/932/97880100976
+Senior Data Scientist,Amplitude,Product Analytics / Experimentation,"San Francisco, CA",Python; SQL; experimentation; statistics; Spark or Hadoop; data pipelines; customer advisory,2+ years as a data scientist,"• Advise customers on experimentation and digital-product optimization.
+• Use statistics and data science to answer product questions.
+• Build and analyze experiments and measurement frameworks.
+• Work with data pipelines in warehouse environments.
+• Use Python and SQL for analysis and modeling.
+• Apply Spark or Hadoop when working with large datasets.
+• Communicate with customers as a trusted technical advisor.
+• Translate findings into product and business recommendations.
+• Hold an advanced quantitative or technical degree.
+• Bring at least two years working as a data scientist.","Digital analytics company providing product, experimentation and behavioral-data platforms.
+Its teams help customers use data to improve digital products and growth.",https://job-boards.greenhouse.io/amplitude/jobs/8541697002
+"Data Scientist, Mid",Booz Allen Hamilton,Defense Consulting / Data Science,"San Diego, CA",Python or R; data exploration; cleaning; modeling; visualization; communication,2+ years,"• Explore and clean complex mission or business datasets.
+• Develop analytical models and reusable data-science workflows.
+• Apply statistical and machine-learning techniques.
+• Create visualizations and communicate analytical findings.
+• Work with client stakeholders to define questions and metrics.
+• Validate data quality and model assumptions.
+• Document methods, code and results.
+• Collaborate with software and data-engineering teams.
+• Hold a relevant technical or quantitative degree.
+• Bring at least two years of data exploration, cleaning and analysis experience.","Technology and management consulting company serving government and commercial clients.
+Its AI and data teams build production analytics, software and mission systems.",https://careers.boozallen.com/jobs/JobDetail/San-Diego-Data-Scientist-Mid-R0241184/125109
+Data Scientist II,Generac,Energy Technology / Data Science,"Waukesha, WI",Python; SQL; Git; machine learning; data mining; statistical modeling,2+ years post-graduate in data science or machine learning,"• Develop data-science solutions for energy products and operations.
+• Prepare and analyze structured business or product data.
+• Apply machine-learning and data-mining techniques.
+• Build repeatable analysis and modeling code in Python.
+• Query and transform data using SQL.
+• Use source control in a collaborative engineering environment.
+• Evaluate model results and communicate findings.
+• Work with product and engineering stakeholders.
+• Hold a bachelor's degree in a relevant quantitative field.
+• Bring at least two years of post-graduate data-science or ML experience.","Energy-technology company producing generators, storage and connected energy solutions.
+Its data teams apply analytics and machine learning to products and operations.",https://careers.generac.com/de/jobs/jr13572/data-scientist-ii/
+Agentic AI Developer,ManTech,Federal Technology / Agentic AI,United States,Python; LLMs; agents; RAG; APIs; vector databases; cloud deployment,2+ years,"• Develop agentic-AI applications for federal or mission customers.
+• Integrate LLMs with tools, APIs and enterprise data.
+• Implement retrieval and knowledge-grounding workflows.
+• Build secure, maintainable application services.
+• Evaluate outputs, latency and operational reliability.
+• Work with cloud and data-engineering teams.
+• Document architectures, prompts and evaluation results.
+• Support demonstrations and production deployment.
+• Hold a relevant technical degree or equivalent experience.
+• Bring at least two years of relevant professional experience.","U.S. technology contractor serving defense, intelligence and federal customers.
+Its engineers build secure data, cyber, cloud and AI capabilities.",https://careers.mantech.com/en_US/careers/JobDetail/Agentic-AI-Developer/64069
+Agentic AI Machine Learning Engineer,Booz Allen Hamilton,Government Technology / Production ML,"Washington, DC",Python; production-grade ML; Docker/Kubernetes; GenAI/LLMs; AI agents; multimodal ML; cloud platforms; model deployment,3+ years as an ML engineer building production-grade ML; 3+ years in data science/data research; 3+ years with cloud platforms,"• Design and build production-grade agentic-AI and machine-learning solutions.
+• Build ML systems with production tooling such as Docker or Kubernetes.
+• Train or deploy models across multiple data modalities.
+• Integrate models with enterprise data, APIs and software services.
+• Develop application and orchestration code in Python.
+• Deploy and operate solutions using cloud platforms.
+• Create model-evaluation, monitoring and reliability approaches.
+• Collaborate with client, software, data-science and research teams.
+• Document system architecture and operational controls.
+• Bring 3+ years in production ML engineering, 3+ years in data science or research, and 3+ years with cloud platforms.","Technology and management consulting company serving government and commercial clients.
+Its AI and data teams build production analytics, software and mission systems.",https://careers.boozallen.com/jobs/JobDetail/Washington-Agentic-AI-Machine-Learning-Engineer-R0235649/121791
+"Product Manager II, AI & Data Security",Datadog,Cloud Security / AI Governance,"Boston, MA or New York, NY (Hybrid)",Product management; AI security; cloud architecture; data security; customer discovery; roadmap ownership,3+ years in technical product management,"• Own roadmap capabilities for AI discovery and data security.
+• Define product features for AI posture and configuration risk.
+• Address sensitive-data exposure and policy violations.
+• Partner with engineering, design and security research.
+• Engage customers to understand AI adoption and security needs.
+• Translate emerging AI risks into actionable product capabilities.
+• Coordinate launches and product iteration with go-to-market teams.
+• Track adoption and customer outcomes.
+• Understand generative AI and modern cloud architectures.
+• Bring at least three years building technical products.","Cloud observability and security company providing monitoring across applications, infrastructure and data.
+Its AI-era platform includes model, agent and security capabilities.",https://careers.datadoghq.com/detail/7982288/?gh_jid=7982288
+Senior Machine Learning Engineer,DraftKings,Sports Technology / MLOps,"Boston, MA",Production Python; SQL; data modeling; MLOps; feature pipelines; testing; version control,3+ years writing production Python and working with structured data,"• Build and maintain machine-learning services and data workflows.
+• Write scalable production Python applications.
+• Work with structured data, SQL and data modeling.
+• Develop or maintain feature and data pipelines.
+• Use model registries, orchestration and feature-store concepts.
+• Apply object-oriented design, testing and version control.
+• Collaborate with data scientists and product engineers.
+• Improve model reliability and production operations.
+• Bring strong software-engineering fundamentals.
+• Bring at least three years with production Python and structured data.","Digital sports entertainment and gaming company.
+Its engineering teams use data, personalization and machine learning in consumer products.",https://careers.draftkings.com/jobs/jr14444/senior-machine-learning-engineer/
+Data Scientist II,Lennar,Real Estate / Applied AI,"Miami, FL",Python; SQL; predictive modeling; NLP; AI agents; data preparation; experimentation,3+ years applying data science to business problems,"• Build and refine predictive and analytical models.
+• Work with structured and unstructured data.
+• Develop AI agents and analytical pipelines.
+• Prepare, clean and integrate data from multiple sources.
+• Partner with engineering teams to deploy models.
+• Measure, monitor and improve model and business outcomes.
+• Collaborate with cross-functional stakeholders.
+• Communicate technical concepts to analysts and business users.
+• Bring strong SQL experience and exposure to AI or machine learning.
+• Bring at least three years applying data science to business problems.","Major U.S. homebuilder and real-estate company.
+Its Applied AI and Data Science teams build analytics, ML products and production platforms.",https://careers.lennar.com/job/663/data_scientist_ii
+Robotics Machine Learning Engineer,Persona AI,Robotics / Embodied AI,"Pensacola, FL or Houston, TX",PyTorch/JAX/TensorFlow; robot learning; perception; navigation; manipulation; cloud; production software,3+ years applying machine learning to robotics,"• Design Persona's machine-learning software stack for humanoid robots.
+• Apply ML to manipulation, navigation, locomotion and perception.
+• Develop, test and deploy models and data pipelines.
+• Collect and manage data for robot-learning workflows.
+• Monitor model performance in real-world robotic systems.
+• Collaborate with universities and external technology partners.
+• Help grow the machine-learning and autonomy teams.
+• Write high-quality production software.
+• Understand traditional and learning-based robotics approaches.
+• Bring at least three years applying ML to robotics.","Robotics company developing humanoid robots and embodied-AI systems.
+Its engineering teams work on perception, manipulation, navigation and locomotion.",https://jobs.ashbyhq.com/persona.ai/b211bb98-0522-4d48-8f05-5df4b164dee2
+Computer Vision AI Engineer,Booz Allen Hamilton,Defense / Computer Vision,"McLean, VA",Computer vision; deep learning; sensor fusion; target tracking; Python; model deployment,4+ years in sensor fusion and target tracking,"• Develop computer-vision and AI capabilities for mission systems.
+• Apply deep learning to imagery and sensor data.
+• Implement sensor-fusion and target-tracking approaches.
+• Prepare data and evaluate model performance.
+• Integrate models with software and operational systems.
+• Collaborate with engineers and mission subject-matter experts.
+• Document algorithms, tests and system behavior.
+• Support deployment in secure environments.
+• Bring strong programming and applied AI skills.
+• Bring at least four years in sensor fusion and target tracking.","Technology and management consulting company serving government and commercial clients.
+Its AI and data teams build production analytics, software and mission systems.",https://careers.boozallen.com/careers/JobDetail/McLean-Computer-Vision-AI-Engineer-R0244633/127417
+"Data Scientist, Senior",Booz Allen Hamilton,Government Consulting / Data Science,"Edgewood, MD",Data science; ML; data engineering; analytics; Palantir Foundry; Python; stakeholder communication,4+ years,"• Develop data-science solutions for mission and operational problems.
+• Analyze complex structured and unstructured datasets.
+• Build machine-learning and analytical workflows.
+• Use data-engineering methods to prepare reliable datasets.
+• Develop visualizations and decision-support products.
+• Collaborate with client and technical stakeholders.
+• Apply platforms such as Palantir Foundry where required.
+• Document analyses, models and assumptions.
+• Communicate findings clearly to multiple audiences.
+• Bring at least four years in data science, ML, engineering or analytics.","Technology and management consulting company serving government and commercial clients.
+Its AI and data teams build production analytics, software and mission systems.",https://careers.boozallen.com/jobs/JobDetail/Edgewood-Data-Scientist-Senior-R0241997/125870
+Senior Database Engineer,DataRobot,Enterprise AI / Data Infrastructure,"Lviv, Ukraine or Kyiv, Ukraine",Distributed databases; cloud infrastructure; performance tuning; reliability; automation; data platforms,4+ years managing large-scale database systems,"• Operate and improve large-scale database systems supporting an AI platform.
+• Design resilient, scalable data-storage architectures.
+• Monitor database health, capacity and performance.
+• Automate operational tasks and deployment workflows.
+• Tune queries, indexes and storage configurations.
+• Troubleshoot complex production incidents.
+• Partner with platform, security and application teams.
+• Document operational standards and recovery procedures.
+• Bring strong cloud and distributed-systems knowledge.
+• Bring at least four years managing large-scale databases.","Enterprise AI company providing platforms for developing, deploying and governing AI models.
+Its engineering organization operates large-scale cloud and data systems.",https://www.datarobot.com/careers/open-positions/job/102569/
+Senior AI/ML Engineer,Optum,Healthcare Technology / AI Platforms,"Remote, United States; primary posting location San Francisco, CA",Python or Java; software engineering; AI/ML and LLMs; web/API development; AWS cloud; chatbots/conversational AI; NLP; agentic AI; security and production operations,6+ years software engineering; 4+ years building AI/ML solutions; 4+ years web/API development; 4+ years cloud-hosted applications,"• Design, develop, test, deploy and maintain AI-powered software solutions.
+• Build responsible AI capabilities using generative AI and traditional machine learning.
+• Develop chatbots, conversational-AI and NLP-based solutions.
+• Build agentic-AI capabilities using MCP or related orchestration frameworks.
+• Integrate AI features into web services, APIs and cloud-modernization initiatives.
+• Provide technical leadership and mentor engineering team members.
+• Partner with product, architecture and engineering leaders.
+• Ensure security, access control, logging, monitoring, performance and disaster-recovery readiness.
+• Use Python or Java and host applications in cloud environments, with AWS preferred.
+• Bring 6+ years of software engineering plus 4+ years each in AI/ML, web/API development and cloud-hosted applications.","Health-services and technology business within UnitedHealth Group.
+Its engineering teams build cloud, analytics and AI systems for healthcare operations.",https://careers.unitedhealthgroup.com/job/san-francisco/senior-ai-ml-engineer-remote/34088/95955894432
+Sr. AI Engineer - Promo Optimisation,Target,Retail / Pricing and Promotion AI,"Bengaluru, India",Python; production ML; MLOps; data engineering; optimization; testing; software design,4+ years,"• Build AI and optimization systems for retail promotions.
+• Develop production-quality Python services and model workflows.
+• Work across ML engineering, data engineering and MLOps.
+• Translate merchandising problems into technical solutions.
+• Create modular, testable and maintainable code.
+• Deploy and monitor production ML systems.
+• Collaborate with data scientists, engineers and business teams.
+• Improve performance, reliability and operational quality.
+• Hold a relevant technical degree or equivalent experience.
+• Bring at least four years in software, AI, ML, data or MLOps engineering.","Large U.S. retailer operating stores and digital-commerce platforms.
+Its technology organization builds production AI, optimization, search and recommendation systems.",https://corporate.target.com/jobs/w23/83/sr-ai-engineer-promo-optimisation
+Generative AI Engineer,Booz Allen Hamilton,Government Consulting / Generative AI,"Ashburn, VA",Python; LLMs; NLP; deep learning; agentic AI; software engineering; model deployment,5+ years; plus 1+ year in agentic AI,"• Design and build generative-AI applications for client missions.
+• Develop LLM, NLP and deep-learning capabilities.
+• Build agentic workflows and tool integrations.
+• Create production software around models and data.
+• Evaluate quality, safety and operational performance.
+• Integrate AI services with enterprise applications.
+• Collaborate with engineers, data scientists and clients.
+• Document architectures, prompts and model behavior.
+• Bring at least one year of agentic-AI development.
+• Bring at least five years in software, ML engineering, data science or research.","Technology and management consulting company serving government and commercial clients.
+Its AI and data teams build production analytics, software and mission systems.",https://careers.boozallen.com/careers/JobDetail?jobId=126635
+AI Engineer,Chickasaw Nation Industries,Federal Services / Enterprise AI,United States,Software implementation; Python; AI engineering; cloud; APIs; secure systems,5+ years in software implementation,"• Design and implement AI-enabled enterprise software.
+• Integrate models and intelligent services with applications.
+• Build maintainable backend services and APIs.
+• Support secure cloud or client-hosted deployments.
+• Translate client requirements into technical architecture.
+• Test, document and troubleshoot software solutions.
+• Collaborate with government and engineering stakeholders.
+• Apply modern software-development and deployment practices.
+• Meet any customer security or access requirements.
+• Bring at least five years of software-implementation experience.","Federal contractor providing technology and professional services to government customers.
+Its engineering teams deliver secure enterprise software, data and AI capabilities.",https://chickasaw.com/careers/211951
+Senior Machine Learning Engineer - Disney Streaming,Disney,Media Streaming / Personalization,"New York, NY or Glendale, CA (On-site 4 days/week)",Python; SQL; Spark; Databricks; recommendation systems; deep learning; production ML,5+ years,"• Develop machine-learning models for streaming personalization.
+• Identify recommendation and product opportunities with stakeholders.
+• Perform large-scale data analysis and data engineering.
+• Write scalable production Python and SQL.
+• Develop algorithms for deployment to production systems.
+• Build and maintain ML and data pipelines.
+• Use technologies such as Spark, Databricks and cloud storage.
+• Measure model quality through experimentation and analysis.
+• Apply modern machine-learning and deep-learning methods.
+• Bring at least five years in ML modeling, data analysis or data engineering.","Global media and entertainment company operating streaming, studios, parks and consumer businesses.
+Its technology teams build personalization, advertising, measurement and content systems.",https://jobs.disneycareers.com/job/new-york/senior-machine-learning-engineer-disney-streaming/391/91701032832

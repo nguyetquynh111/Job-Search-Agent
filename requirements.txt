@@ -1,0 +1,11 @@
+langchain-core>=0.3.0
+langchain-openai>=0.2.0
+langgraph>=0.2.60
+langgraph-checkpoint-sqlite>=2.0.0
+langfuse>=2.53.0,<3.0.0
+pydantic>=2.7.0
+python-dotenv>=1.0.1
+PyYAML>=6.0.2
+pandas>=2.2.0
+streamlit>=1.37.0
+pytest>=8.2.0
