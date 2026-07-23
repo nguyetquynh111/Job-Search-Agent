@@ -86,7 +86,9 @@ class SingleAgentController:
             try:
                 return self._llm_decide(state)
             except Exception as exc:
-                logger.warning("LLM controller unavailable; using offline controller: %s", exc)
+                logger.warning(
+                    "LLM controller unavailable; using offline controller: %s", exc
+                )
         return self._offline_decide(state)
 
     def _llm_decide(self, state: AgentState) -> AgentDecision:
@@ -129,7 +131,9 @@ class SingleAgentController:
         elif phase == Phase.COVER_LETTERS.value:
             decision = self._cover_letter_decision(state)
         else:
-            raise AgentControllerError(f"No model-visible tool is available in phase {phase}.")
+            raise AgentControllerError(
+                f"No model-visible tool is available in phase {phase}."
+            )
         assert_tool_allowed(phase, decision.selected_tool)
         return decision
 
@@ -152,6 +156,7 @@ class SingleAgentController:
             jobs=jobs,
             candidate_profile=profile,
             resume_evidence=profile.resume_evidence,
+            master_skill_evidence=profile.master_skill_evidence,
             portfolio_evidence=self._portfolio_evidence(state),
             memory_evidence=self._memory_evidence(state),
         )
@@ -178,6 +183,7 @@ class SingleAgentController:
         portfolio = Portfolio.model_validate(state["portfolio"])
         evidence_items = [
             *profile.resume_evidence,
+            *profile.master_skill_evidence,
             *self._portfolio_evidence(state),
             *self._memory_evidence(state),
         ]
@@ -185,7 +191,7 @@ class SingleAgentController:
             job=job,
             candidate_profile=profile,
             evidence_items=evidence_items,
-            current_resume_projects=["Student Support RAG Assistant", "Forecasting Dashboard"],
+            current_resume_projects=profile.resume_projects,
             portfolio_projects=portfolio.projects,
         )
         return AgentDecision(
@@ -207,7 +213,9 @@ class SingleAgentController:
                 state.get("top_3_job_ids", []), state.get("tailoring_results", {})
             )
             revision_feedback = None
-            summary = f"The controller selected initial resume tailoring for {next_job_id}."
+            summary = (
+                f"The controller selected initial resume tailoring for {next_job_id}."
+            )
         if not next_job_id:
             raise AgentControllerError("No selected job is pending resume tailoring.")
         job = self._job_by_id(state, next_job_id)
@@ -259,6 +267,7 @@ class SingleAgentController:
         profile = CandidateProfile.model_validate(state["candidate_profile"])
         return [
             *profile.resume_evidence,
+            *profile.master_skill_evidence,
             *self._portfolio_evidence(state),
             *self._memory_evidence(state),
         ]
@@ -269,7 +278,9 @@ class SingleAgentController:
         return [*portfolio.evidence_items, *profile.portfolio_evidence]
 
     def _memory_evidence(self, state: AgentState) -> list[EvidenceItem]:
-        facts = [MemoryFact.model_validate(item) for item in state.get("memory_facts", [])]
+        facts = [
+            MemoryFact.model_validate(item) for item in state.get("memory_facts", [])
+        ]
         return [
             EvidenceItem.model_validate(memory_fact_to_evidence(fact))
             for fact in facts
@@ -282,7 +293,9 @@ class SingleAgentController:
             raise AgentControllerError(f"Unknown job ID: {job_id}")
         return Job.model_validate(jobs[job_id])
 
-    def _next_missing(self, ordered_ids: list[str], completed: dict[str, Any]) -> str | None:
+    def _next_missing(
+        self, ordered_ids: list[str], completed: dict[str, Any]
+    ) -> str | None:
         for item_id in ordered_ids:
             if item_id not in completed:
                 return item_id

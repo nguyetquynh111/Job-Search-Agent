@@ -14,6 +14,7 @@ class ScoreJobsInput(StrictBaseModel):
     jobs: list[Job]
     candidate_profile: CandidateProfile
     resume_evidence: list[EvidenceItem] = Field(default_factory=list)
+    master_skill_evidence: list[EvidenceItem] = Field(default_factory=list)
     portfolio_evidence: list[EvidenceItem] = Field(default_factory=list)
     memory_evidence: list[EvidenceItem] = Field(default_factory=list)
 

@@ -40,7 +40,7 @@ from src.data_loader import (
     load_candidate_profile,
     load_jobs_csv,
     load_portfolio,
-    load_resume_evidence,
+    load_resume_data,
     load_text_path,
 )
 from src.memory.extractor import extract_memory_facts
@@ -51,6 +51,7 @@ from src.review.review_service import (
     build_review_payload,
     normalize_review_feedback,
 )
+from src.schemas.common import normalize_string_list
 from src.tools.registry import ToolSpec, load_tool_registry
 
 logger = logging.getLogger(__name__)
@@ -96,7 +97,9 @@ def build_agent_graph(
             with trace_manager.span("load_preferences", load_preferences_metadata):
                 profile = load_candidate_profile(
                     paths.get("preferences_path")
-                    or paths.get("candidate_profile_path", "data/candidate_profile.yaml")
+                    or paths.get(
+                        "candidate_profile_path", "data/candidate_profile.yaml"
+                    )
                 )
                 load_preferences_metadata.update(
                     {
@@ -113,17 +116,34 @@ def build_agent_graph(
                 resume_path = load_text_path(
                     paths.get("resume_path", "data/resume.tex"), "Resume"
                 )
-                resume_evidence = load_resume_evidence(resume_path)
+                resume_data = load_resume_data(resume_path)
                 profile = profile.model_copy(
                     update={
+                        "resume_content": resume_data.plain_text,
+                        "skills": normalize_string_list(
+                            [*profile.skills, *resume_data.skills]
+                        ),
+                        "education": normalize_string_list(
+                            [*profile.education, *resume_data.education]
+                        ),
+                        "experience": normalize_string_list(
+                            [*profile.experience, *resume_data.experience]
+                        ),
+                        "resume_projects": normalize_string_list(
+                            [*profile.resume_projects, *resume_data.projects]
+                        ),
                         "resume_evidence": [
                             *profile.resume_evidence,
-                            *resume_evidence,
-                        ]
+                            *resume_data.evidence_items,
+                        ],
                     }
                 )
                 load_resume_metadata.update(
-                    {"status": "OK", "evidence_count": len(resume_evidence)}
+                    {
+                        "status": "OK",
+                        "evidence_count": len(resume_data.evidence_items),
+                        "resume_project_count": len(resume_data.projects),
+                    }
                 )
             load_portfolio_metadata = {
                 "run_id": run_id,
@@ -252,13 +272,17 @@ def build_agent_graph(
         }
         try:
             assert_tool_allowed(phase, tool_name)
-            input_model = spec.input_model.model_validate(state.get("current_tool_input", {}))
+            input_model = spec.input_model.model_validate(
+                state.get("current_tool_input", {})
+            )
             metadata.update(_tool_input_metadata(tool_name, input_model))
             span_name = _span_name_for_tool(tool_name, state, input_model)
             with trace_manager.span(span_name, metadata):
                 raw_output = spec.func(input_model)
                 output_model = spec.output_model.model_validate(
-                    raw_output.model_dump() if isinstance(raw_output, BaseModel) else raw_output
+                    raw_output.model_dump()
+                    if isinstance(raw_output, BaseModel)
+                    else raw_output
                 )
                 metadata.update(
                     {
@@ -272,7 +296,9 @@ def build_agent_graph(
                     {
                         "run_id": state.get("run_id"),
                         "session_id": state.get("thread_id"),
-                        "top_3_job_ids": output_model.model_dump().get("top_3_job_ids", []),
+                        "top_3_job_ids": output_model.model_dump().get(
+                            "top_3_job_ids", []
+                        ),
                         "phase": phase,
                         "status": "OK",
                     },
@@ -643,7 +669,9 @@ def build_agent_graph(
     return graph.compile(checkpointer=checkpointer)
 
 
-def create_sqlite_checkpointer(db_path: str | Path) -> tuple[Any, AbstractContextManager[Any]]:
+def create_sqlite_checkpointer(
+    db_path: str | Path,
+) -> tuple[Any, AbstractContextManager[Any]]:
     """Create a SQLite checkpointer and keep its context manager alive."""
 
     from langgraph.checkpoint.sqlite import SqliteSaver
@@ -826,7 +854,12 @@ def _tool_input_metadata(tool_name: str, input_model: BaseModel) -> dict[str, An
     elif tool_name == "score_jobs":
         metadata["input_job_count"] = len(payload.get("jobs", []))
         metadata["resume_evidence_count"] = len(payload.get("resume_evidence", []))
-        metadata["portfolio_evidence_count"] = len(payload.get("portfolio_evidence", []))
+        metadata["master_skill_evidence_count"] = len(
+            payload.get("master_skill_evidence", [])
+        )
+        metadata["portfolio_evidence_count"] = len(
+            payload.get("portfolio_evidence", [])
+        )
         metadata["memory_evidence_count"] = len(payload.get("memory_evidence", []))
     elif tool_name in {"analyze_fit", "tailor_resume", "generate_cover_letter"}:
         metadata.update(_job_metadata(payload.get("job", {})))
@@ -889,7 +922,9 @@ def _job_metadata(job: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _span_name_for_tool(tool_name: str, state: AgentState, input_model: BaseModel) -> str:
+def _span_name_for_tool(
+    tool_name: str, state: AgentState, input_model: BaseModel
+) -> str:
     if tool_name not in {
         "analyze_fit",
         "tailor_resume",
