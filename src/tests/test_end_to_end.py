@@ -48,13 +48,23 @@ def test_full_workflow_completes_end_to_end(tmp_path: Path, monkeypatch) -> None
         item
         for item in second["agent_decisions"]
         if item["selected_tool"] == "tailor_resume"
-        and item["arguments"]["job"]["job_id"] == rejected_job_id
         and item["arguments"].get("revision_feedback")
     ]
-    assert revision_decisions
+    assert {
+        item["arguments"]["job"]["job_id"] for item in revision_decisions
+    } == set(second["top_3_job_ids"])
     assert any(
         evidence["evidence_id"].startswith("mem-")
-        for evidence in revision_decisions[-1]["arguments"]["candidate_evidence"]
+        for item in revision_decisions
+        for evidence in item["arguments"]["candidate_evidence"]
+    )
+    assert all(
+        item["arguments"]["source_resume_tex_path"]
+        != second["resume_path"]
+        for item in revision_decisions
+    )
+    assert set(second["review_history"][0]["actions_taken"]) == set(
+        second["top_3_job_ids"]
     )
 
     second_payload = second["__interrupt__"][0].value

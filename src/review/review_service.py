@@ -29,9 +29,12 @@ def build_review_payload(state: dict) -> ReviewInterruptPayload:
             change_log=tailoring.get("change_log", []),
             resume_pdf_path=tailoring["output_pdf_path"],
         )
+    revision_round = int(state.get("revision_round", 0))
     return ReviewInterruptPayload(
-        review_round=int(state.get("revision_round", 0)) + 1,
+        review_round=revision_round + 1,
         max_revision_rounds=MAX_REVISION_ROUNDS,
+        revision_round=revision_round,
+        is_initial_review=revision_round == 0,
         resumes=resumes,
     )
 

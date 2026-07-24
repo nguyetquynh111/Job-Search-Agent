@@ -47,9 +47,17 @@ if not payload:
     st.stop()
 
 resumes = payload.get("resumes", {})
-st.caption(
-    f"Review round {payload.get('review_round', 1)} of {payload.get('max_revision_rounds', 2)}"
-)
+revision_round = int(payload.get("revision_round", 0))
+if payload.get("is_initial_review", revision_round == 0):
+    st.caption(
+        "Initial review · "
+        f"up to {payload.get('max_revision_rounds', 2)} revision rounds"
+    )
+else:
+    st.caption(
+        f"Revision round {revision_round} of "
+        f"{payload.get('max_revision_rounds', 2)}"
+    )
 tabs = st.tabs(
     [
         f"{resume['company']} · {resume['job_title']}"

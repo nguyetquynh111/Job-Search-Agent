@@ -24,6 +24,7 @@ class AgentState(TypedDict, total=False):
     portfolio: dict[str, Any]
     memory_file: str
     memory_facts: list[dict[str, Any]]
+    new_memory_fact_ids: list[str]
 
     filtered_jobs: list[dict[str, Any]]
     rejected_jobs: list[dict[str, Any]]
@@ -54,10 +55,10 @@ class AgentState(TypedDict, total=False):
 
 
 def create_initial_state(
-    jobs_path: str = "data/demo_jobs.csv",
-    candidate_profile_path: str = "data/demo_preferences.yaml",
-    resume_path: str = "data/demo_resume.tex",
-    portfolio_path: str = "data/demo_portfolio.txt",
+    jobs_path: str = "data/jobs.csv",
+    candidate_profile_path: str = "data/preferences.yaml",
+    resume_path: str = "data/resume.tex",
+    portfolio_path: str = "data/portfolio.txt",
     memory_file: str | None = None,
     run_id: str | None = None,
     thread_id: str | None = None,
@@ -80,6 +81,8 @@ def create_initial_state(
             "memory_file": resolved_memory_file,
         },
         memory_file=resolved_memory_file,
+        memory_facts=[],
+        new_memory_fact_ids=[],
         filtered_jobs=[],
         rejected_jobs=[],
         ranked_jobs=[],

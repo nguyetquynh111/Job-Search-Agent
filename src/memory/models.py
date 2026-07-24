@@ -32,6 +32,15 @@ class MemoryFact(StrictBaseModel):
     )
     active: bool = True
 
+    @property
+    def deduplication_key(self) -> tuple[str, str]:
+        """Return the case-insensitive identity used by the JSON store."""
+
+        return (
+            self.fact_type.strip().casefold(),
+            " ".join(self.canonical_value.split()).casefold(),
+        )
+
 
 def memory_fact_to_evidence(fact: MemoryFact) -> dict[str, Any]:
     """Represent a memory fact as evidence for downstream tools."""

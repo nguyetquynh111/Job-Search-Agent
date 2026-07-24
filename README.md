@@ -83,7 +83,12 @@ The system has exactly one controller, `SingleAgentController`, and exactly five
 - `tailor_resume`
 - `generate_cover_letter`
 
-Deterministic graph nodes enforce phase order; the controller only selects the next allowed tool and arguments.
+Deterministic graph nodes enforce prerequisites and the mandatory phase order. When
+an LLM is configured, it receives a compact workflow snapshot and the currently
+allowed tool descriptions, then returns a structured tool intent and auditable
+decision summary. Python assembles the tool arguments from checkpointed,
+Pydantic-validated evidence so the model cannot rewrite candidate facts. Offline
+mode uses the same state machine with a clearly labelled policy decision.
 
 When `DEEPINFRA_API_KEY` and `LLM_MODEL` are configured, the controller attempts a structured DeepInfra model decision call. `DEEPINFRA_BASE_URL` defaults to `https://api.deepinfra.com/v1/openai`. If the LLM is unavailable, local runs fall back to the deterministic controller path and record concise decision summaries without hidden chain-of-thought.
 
@@ -127,7 +132,8 @@ The shared Pydantic contract references remain in `src/schemas/` so independentl
 
 ## Human Review
 
-LangGraph pauses once all three selected resumes are tailored. The interrupt payload contains all three resumes together:
+LangGraph has one human-review gate, reached only after all three selected resumes
+are tailored. The interrupt payload contains all three resumes together:
 
 ```python
 {
@@ -145,7 +151,13 @@ LangGraph pauses once all three selected resumes are tailored. The interrupt pay
 }
 ```
 
-The Review page requires one approve/reject decision per selected job and resumes the graph with `Command(resume=feedback)`. Rejected resumes are revised in the same review phase. If resumes remain rejected after two revision rounds, the run status becomes `FAILED_REVIEW` and cover letters are not generated.
+The Review page requires one approve/reject decision per selected job and resumes
+the graph with `Command(resume=feedback)`. Rejected resumes are revised within this
+same review stage, using the previous tailored `.tex` rather than restarting from
+the source resume. At most two revision rounds are allowed. Each round records the
+feedback, memory writes, actions taken, change log, and resulting artifact paths.
+If changes are still required after round two, the run status becomes
+`FAILED_REVIEW` and cover letters are not generated.
 
 ## Persistent Memory
 
@@ -158,7 +170,8 @@ When a new fact is written:
 
 - the JSON file is updated;
 - `memory_facts` in the graph state is updated;
-- revisions in the same run receive the new memory as evidence;
+- all Top-3 drafts are reconsidered immediately with the new memory as evidence,
+  including drafts that were approved before the new fact was learned;
 - a `persist_memory` trace span is recorded.
 
 

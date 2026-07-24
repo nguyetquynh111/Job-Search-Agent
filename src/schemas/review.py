@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, model_validator
 
@@ -50,6 +50,8 @@ class ReviewInterruptPayload(StrictBaseModel):
 
     review_round: int
     max_revision_rounds: int
+    revision_round: int = 0
+    is_initial_review: bool = True
     resumes: dict[str, ReviewResumePayload]
 
 
@@ -59,3 +61,5 @@ class ReviewHistoryEntry(StrictBaseModel):
     review_round: int
     decisions: dict[str, ReviewDecision]
     rejected_job_ids: list[str] = Field(default_factory=list)
+    memory_writes: list[dict[str, Any]] = Field(default_factory=list)
+    actions_taken: dict[str, dict[str, Any]] = Field(default_factory=dict)

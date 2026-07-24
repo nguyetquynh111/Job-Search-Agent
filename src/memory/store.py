@@ -48,13 +48,13 @@ class JSONMemoryStore:
             return self.load()
         current = self.load()
         known = {
-            (fact.fact_type.lower(), fact.canonical_value.lower())
+            fact.deduplication_key
             for fact in current
             if fact.active
         }
         deduped: list[MemoryFact] = []
         for fact in facts:
-            key = (fact.fact_type.lower(), fact.canonical_value.lower())
+            key = fact.deduplication_key
             if key in known:
                 logger.info("Skipping duplicate memory fact: %s", fact.canonical_value)
                 continue

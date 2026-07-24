@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -51,6 +52,15 @@ class AgentDecision(StrictBaseModel):
     arguments: dict[str, Any]
     decision_summary: str
     evidence_ids: list[str] = Field(default_factory=list)
+    decision_source: Literal["llm", "offline_policy"] = "offline_policy"
+
+
+class AgentIntent(StrictBaseModel):
+    """Small model-owned decision; Python builds the validated tool payload."""
+
+    phase: str
+    selected_tool: str
+    decision_summary: str
 
 
 class AgentControllerError(RuntimeError):
@@ -92,7 +102,7 @@ class SingleAgentController:
         return self._offline_decide(state)
 
     def _llm_decide(self, state: AgentState) -> AgentDecision:
-        """Use a structured LLM call for controller decisions when configured."""
+        """Let the LLM select the next tool without letting it rewrite evidence."""
 
         from langchain_openai import ChatOpenAI
 
@@ -102,19 +112,46 @@ class SingleAgentController:
             base_url=self.deepinfra_base_url,
             temperature=0,
         )
-        structured = llm.with_structured_output(AgentDecision)
+        structured = llm.with_structured_output(AgentIntent)
         phase = state.get("phase", Phase.INITIALIZE.value)
-        draft = self._offline_decide(state)
-        prompt = (
-            f"{CONTROLLER_SYSTEM_PROMPT}\n\n"
-            f"Current phase: {phase}\n"
-            f"Allowed tools: {self._allowed_tool_names(phase)}\n"
-            f"Use this validated argument draft unless you can identify a schema issue: "
-            f"{draft.model_dump()}"
+        allowed_tools = self._allowed_tool_names(phase)
+        tool_descriptions = {
+            name: self.registry[name].description for name in allowed_tools
+        }
+        snapshot = self._workflow_snapshot(state)
+        intent = structured.invoke(
+            [
+                ("system", CONTROLLER_SYSTEM_PROMPT),
+                (
+                    "human",
+                    "Choose exactly one next tool from the allowed tools. Explain the "
+                    "decision briefly using observable workflow state; do not provide "
+                    "chain-of-thought or tool arguments.\n"
+                    f"Workflow state: {json.dumps(snapshot, sort_keys=True)}\n"
+                    f"Allowed tools: {json.dumps(tool_descriptions, sort_keys=True)}",
+                ),
+            ]
         )
-        decision = structured.invoke(prompt)
-        assert_tool_allowed(phase, decision.selected_tool)
-        return decision
+        if intent.phase != phase:
+            raise AgentControllerError(
+                f"Model returned phase {intent.phase!r}; expected {phase!r}."
+            )
+        assert_tool_allowed(phase, intent.selected_tool)
+
+        # Arguments are assembled from checkpointed state and Pydantic contracts.
+        # This prevents a model-selected call from fabricating or dropping evidence.
+        decision = self._offline_decide(state)
+        if intent.selected_tool != decision.selected_tool:
+            raise AgentControllerError(
+                f"Model selected {intent.selected_tool!r}, but workflow prerequisites "
+                f"require {decision.selected_tool!r}."
+            )
+        return decision.model_copy(
+            update={
+                "decision_summary": intent.decision_summary,
+                "decision_source": "llm",
+            }
+        )
 
     def _offline_decide(self, state: AgentState) -> AgentDecision:
         """Deterministic fallback used for local demos and tests."""
@@ -226,9 +263,11 @@ class SingleAgentController:
         payload = TailorResumeInput(
             job=job,
             fit_analysis=fit_analysis,
-            source_resume_tex_path=state["resume_path"],
+            source_resume_tex_path=self._resume_source_path(state, next_job_id),
             candidate_evidence=evidence_items,
-            revision_feedback=revision_feedback,
+            revision_feedback=_revision_feedback(
+                state, next_job_id, revision_feedback
+            ),
         )
         return AgentDecision(
             phase=Phase.TAILOR.value,
@@ -308,8 +347,69 @@ class SingleAgentController:
             if name in self.available_tools
         ]
 
+    def _resume_source_path(self, state: AgentState, job_id: str) -> str:
+        """Use the prior tailored TeX as the source for a revision."""
+
+        previous = state.get("tailoring_results", {}).get(job_id, {})
+        if job_id in state.get("pending_revision_job_ids", []):
+            return previous.get("output_tex_path") or state["resume_path"]
+        return state["resume_path"]
+
+    def _workflow_snapshot(self, state: AgentState) -> dict[str, Any]:
+        """Return compact, non-sensitive progress context for tool selection."""
+
+        top_3 = state.get("top_3_job_ids", [])
+        return {
+            "phase": state.get("phase"),
+            "filtered_job_count": len(state.get("filtered_jobs", [])),
+            "ranked_job_count": len(state.get("ranked_jobs", [])),
+            "top_3_job_ids": top_3,
+            "fit_analysis_completed": [
+                job_id for job_id in top_3 if job_id in state.get("fit_analyses", {})
+            ],
+            "tailoring_completed": [
+                job_id
+                for job_id in top_3
+                if job_id in state.get("tailoring_results", {})
+            ],
+            "pending_revision_job_ids": state.get(
+                "pending_revision_job_ids", []
+            ),
+            "approved_job_ids": state.get("approved_job_ids", []),
+            "cover_letters_completed": [
+                job_id
+                for job_id in top_3
+                if job_id in state.get("cover_letter_results", {})
+            ],
+            "revision_round": state.get("revision_round", 0),
+            "memory_fact_count": len(state.get("memory_facts", [])),
+        }
+
 
 def _decision_comment(state: AgentState, job_id: str) -> str | None:
     decision = state.get("review_decisions", {}).get(job_id, {})
     comment = decision.get("comment", "")
     return comment.strip() or None
+
+
+def _revision_feedback(
+    state: AgentState, job_id: str, reviewer_comment: str | None
+) -> str | None:
+    """Combine direct feedback with newly learned, globally available evidence."""
+
+    parts = [reviewer_comment] if reviewer_comment else []
+    new_ids = set(state.get("new_memory_fact_ids", []))
+    learned = [
+        MemoryFact.model_validate(item)
+        for item in state.get("memory_facts", [])
+        if item.get("fact_id") in new_ids and item.get("active", True)
+    ]
+    if learned:
+        evidence = ", ".join(
+            f"{fact.canonical_value} ({fact.fact_id})" for fact in learned
+        )
+        parts.append(
+            "Apply these newly learned candidate facts when relevant to this job, "
+            f"using their memory IDs as evidence: {evidence}."
+        )
+    return "\n".join(parts) or None

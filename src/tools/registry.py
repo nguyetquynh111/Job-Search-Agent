@@ -108,6 +108,3 @@ def as_langchain_tools(registry: dict[str, ToolSpec]) -> list[Any]:
             )
         )
     return tools
-
-
-TOOL_REGISTRY = load_tool_registry()

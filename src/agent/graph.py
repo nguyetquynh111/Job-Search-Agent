@@ -214,6 +214,7 @@ def build_agent_graph(
                 "model_name": controller.model_name,
                 "system_prompt_version": CONTROLLER_SYSTEM_PROMPT_VERSION,
                 "decision_summary": decision.decision_summary,
+                "decision_source": decision.decision_source,
                 "evidence_ids": decision.evidence_ids[:10],
                 "evidence_count": len(decision.evidence_ids),
             }
@@ -276,6 +277,8 @@ def build_agent_graph(
                 state.get("current_tool_input", {})
             )
             metadata.update(_tool_input_metadata(tool_name, input_model))
+            if tool_name == "tailor_resume":
+                metadata["revision_round"] = int(state.get("revision_round", 0))
             span_name = _span_name_for_tool(tool_name, state, input_model)
             with trace_manager.span(span_name, metadata):
                 raw_output = spec.func(input_model)
@@ -339,6 +342,7 @@ def build_agent_graph(
                 "interrupt_payload": payload.model_dump(),
                 "status": RunStatus.WAITING_FOR_REVIEW.value,
                 "phase": Phase.HUMAN_REVIEW.value,
+                "new_memory_fact_ids": [],
                 **_trace_state(trace_manager),
             }
         except Exception as exc:
@@ -391,6 +395,8 @@ def build_agent_graph(
                     for job_id, decision in feedback.decisions.items()
                 },
                 "rejected_job_ids": rejected_job_ids,
+                "memory_writes": [],
+                "actions_taken": {},
             }
             return {
                 "review_decisions": {
@@ -426,7 +432,7 @@ def build_agent_graph(
             comments_by_job = {
                 job_id: decision.get("comment", "")
                 for job_id, decision in decisions.items()
-                if decision.get("decision") == "reject"
+                if decision.get("comment", "").strip()
             }
             review_round = int(state.get("revision_round", 0)) + 1
             facts = extract_memory_facts(comments_by_job, review_round)
@@ -439,12 +445,36 @@ def build_agent_graph(
                 "status": "STARTED",
             }
             with trace_manager.span("persist_memory", metadata):
-                updated = JSONMemoryStore(
+                store = JSONMemoryStore(
                     state.get("memory_file", str(get_config().memory_file))
-                ).append_many(facts)
+                )
+                before = store.load()
+                before_keys = {
+                    fact.deduplication_key for fact in before if fact.active
+                }
+                updated = store.append_many(facts)
+                new_facts = [
+                    fact
+                    for fact in updated
+                    if fact.active and fact.deduplication_key not in before_keys
+                ]
+                metadata["fact_count"] = len(new_facts)
+                metadata["memory_fact_ids"] = [
+                    fact.fact_id for fact in new_facts
+                ]
                 metadata["status"] = "OK"
+            history = [*state.get("review_history", [])]
+            if history:
+                history[-1] = {
+                    **history[-1],
+                    "memory_writes": [
+                        fact.model_dump() for fact in new_facts
+                    ],
+                }
             return {
                 "memory_facts": [fact.model_dump() for fact in updated],
+                "new_memory_fact_ids": [fact.fact_id for fact in new_facts],
+                "review_history": history,
                 **_trace_state(trace_manager),
             }
         except Exception as exc:
@@ -467,8 +497,14 @@ def build_agent_graph(
     def revision_controller(state: AgentState) -> AgentState:
         _sync_trace_manager(state, trace_manager)
         try:
-            rejected = state.get("pending_revision_job_ids", [])
-            if not rejected:
+            rejected = list(state.get("pending_revision_job_ids", []))
+            learned_fact_ids = list(state.get("new_memory_fact_ids", []))
+            affected_job_ids = (
+                list(state.get("top_3_job_ids", []))
+                if learned_fact_ids
+                else rejected
+            )
+            if not affected_job_ids:
                 assert_cover_letters_allowed(
                     state.get("top_3_job_ids", []), state.get("approved_job_ids", [])
                 )
@@ -487,8 +523,8 @@ def build_agent_graph(
                         {
                             "phase": Phase.HUMAN_REVIEW.value,
                             "message": (
-                                "Resumes remained rejected after the maximum "
-                                "revision rounds."
+                                "Resume changes are still required after the "
+                                "maximum revision rounds."
                             ),
                             "type": "FailedReview",
                         },
@@ -503,13 +539,21 @@ def build_agent_graph(
                     "run_id": state.get("run_id"),
                     "session_id": state.get("thread_id"),
                     "review_round": next_round,
-                    "result_count": len(rejected),
+                    "result_count": len(affected_job_ids),
                     "rejected_job_ids": rejected,
+                    "affected_job_ids": affected_job_ids,
+                    "new_memory_fact_ids": learned_fact_ids,
                     "status": "OK",
                 },
             ):
                 return {
                     "revision_round": next_round,
+                    "pending_revision_job_ids": affected_job_ids,
+                    "approved_job_ids": [
+                        job_id
+                        for job_id in state.get("approved_job_ids", [])
+                        if job_id not in affected_job_ids
+                    ],
                     "phase": Phase.TAILOR.value,
                     "status": RunStatus.RUNNING.value,
                     **_trace_state(trace_manager),
@@ -751,6 +795,9 @@ def _apply_tool_output(
         updates.update({"fit_analyses": analyses, "phase": next_phase})
     elif tool_name == "tailor_resume":
         tailoring = {**state.get("tailoring_results", {}), output["job_id"]: output}
+        was_revision = output["job_id"] in state.get(
+            "pending_revision_job_ids", []
+        )
         pending = [
             job_id
             for job_id in state.get("pending_revision_job_ids", [])
@@ -769,6 +816,24 @@ def _apply_tool_output(
                 "phase": next_phase,
             }
         )
+        if was_revision:
+            history = [*state.get("review_history", [])]
+            if history:
+                actions = {
+                    **history[-1].get("actions_taken", {}),
+                    output["job_id"]: {
+                        "revision_round": int(state.get("revision_round", 0)),
+                        "status": output.get("status"),
+                        "change_log": output.get("change_log", []),
+                        "output_tex_path": output.get("output_tex_path"),
+                        "output_pdf_path": output.get("output_pdf_path"),
+                        "memory_fact_ids_available": list(
+                            state.get("new_memory_fact_ids", [])
+                        ),
+                    },
+                }
+                history[-1] = {**history[-1], "actions_taken": actions}
+                updates["review_history"] = history
     elif tool_name == "generate_cover_letter":
         cover_letters = {
             **state.get("cover_letter_results", {}),
