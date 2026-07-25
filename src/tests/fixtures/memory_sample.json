@@ -1,0 +1,28 @@
+[
+  {
+    "fact_id": "mem-graphql01",
+    "fact_type": "skill",
+    "canonical_value": "GraphQL",
+    "provenance": {
+      "source": "human_review",
+      "review_round": 1,
+      "original_statement": "I use GraphQL heavily in my current role.",
+      "related_job_id": "J005"
+    },
+    "created_at": "2026-07-20T10:00:00+00:00",
+    "active": true
+  },
+  {
+    "fact_id": "mem-terraform01",
+    "fact_type": "skill",
+    "canonical_value": "Terraform",
+    "provenance": {
+      "source": "human_review",
+      "review_round": 1,
+      "original_statement": "I also manage infrastructure with Terraform.",
+      "related_job_id": "J005"
+    },
+    "created_at": "2026-07-20T10:01:00+00:00",
+    "active": true
+  }
+]
