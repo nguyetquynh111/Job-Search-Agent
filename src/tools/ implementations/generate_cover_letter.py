@@ -476,4 +476,3 @@ def _run_pdflatex(tex_path: Path) -> list[str]:
         tail = "\n".join(result.stdout.splitlines()[-15:])
         return [f"pdflatex failed for {tex_path.name}: {tail}"]
     return []
-feat: implement generate_cover_letter tool
