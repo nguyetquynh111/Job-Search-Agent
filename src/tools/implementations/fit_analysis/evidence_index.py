@@ -13,7 +13,11 @@ import re
 from dataclasses import dataclass, field
 
 from src.schemas.common import EvidenceItem
-from src.tools.implementations.fit_analysis.aliases import canonicalize
+from src.tools.implementations.fit_analysis.aliases import (
+    canonicalize,
+    curated_vocabulary,
+    skill_in_text,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +35,15 @@ _SOURCE_PRIORITY = {"resume": 0, "master_skills": 1, "portfolio": 2, "memory": 3
 # Colon-parsing of evidence text is only safe for short, skill-style items (e.g.
 # memory facts "skill: PyTorch"); full-text resume/portfolio blobs use tags only.
 _MAX_COLON_PARSE_CHARS = 120
+
+# Section tags whose items are short, structured resume lines (one degree, one
+# role, one project). Their tag says which section they came from, never which
+# skills they mention, so their TEXT is scanned against a bounded vocabulary --
+# otherwise an "M.S. Data Science" line can never ground a "data science" claim.
+# The whole-resume upload blob is tagged only "resume" and is deliberately NOT
+# scannable: indexing every vocabulary hit in a full document would mark almost
+# every skill as resume-present.
+_SCANNABLE_TAGS = {"education", "experience", "project", "projects"}
 
 # Tags that describe the evidence container rather than a concrete skill.
 _GENERIC_TAGS = {
@@ -130,14 +143,40 @@ def _candidate_tokens(item: EvidenceItem) -> set[str]:
     return tokens
 
 
-def build_evidence_index(evidence_items: list[EvidenceItem]) -> EvidenceIndex:
-    """Index every evidence item by the canonical skills it supports."""
+def _scanned_tokens(item: EvidenceItem, vocabulary: set[str]) -> set[str]:
+    """Return vocabulary skills mentioned in a section item's free text.
+
+    Only items carrying a :data:`_SCANNABLE_TAGS` section tag are scanned, and only
+    against the supplied bounded vocabulary, so an education or experience line can
+    ground a skill claim without shredding full documents into spurious tokens.
+    """
+
+    tags = {tag.strip().lower() for tag in item.tags}
+    if not tags & _SCANNABLE_TAGS:
+        return set()
+    return {canonical for canonical in vocabulary if skill_in_text(canonical, item.text)}
+
+
+def build_evidence_index(
+    evidence_items: list[EvidenceItem], vocabulary: set[str] | None = None
+) -> EvidenceIndex:
+    """Index every evidence item by the canonical skills it supports.
+
+    ``vocabulary`` extends the curated alias/category tokens that free-text section
+    items are scanned for -- callers pass the job's required skills so a requirement
+    named only in a resume education or experience line is still found.
+    """
+
+    scan_vocabulary = {canonicalize(token) for token in vocabulary or set()}
+    scan_vocabulary |= curated_vocabulary()
+    scan_vocabulary.discard("")
 
     index = EvidenceIndex()
     for item in evidence_items:
         index.all_ids.add(item.evidence_id)
         kind = source_kind(item.source)
-        for token in _candidate_tokens(item):
+        tokens = _candidate_tokens(item) | _scanned_tokens(item, scan_vocabulary)
+        for token in tokens:
             canonical = canonicalize(token)
             if not canonical:
                 continue

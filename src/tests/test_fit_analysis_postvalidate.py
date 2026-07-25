@@ -54,6 +54,38 @@ def test_evidenced_missing_without_valid_evidence_is_demoted() -> None:
     assert any("demoted" in r.lower() for r in repairs)
 
 
+def test_aligned_without_valid_evidence_is_demoted_to_gap() -> None:
+    # A pass marker may never be asserted without a citation that exists.
+    inp = _base_input()
+    output = FitAnalysisOutput(
+        job_id="J1",
+        aligned_skills=[EvidenceClaim(claim="Python: aligned", evidence_ids=["ev-ghost"])],
+    )
+    result, repairs = post_validate(output, inp)
+    assert result.aligned_skills == []
+    assert [c.claim.split(":")[0] for c in result.genuine_gaps] == ["Python"]
+    assert any("no valid evidence" in r for r in repairs)
+
+
+def test_aligned_with_only_non_resume_evidence_becomes_evidenced_missing() -> None:
+    # "already on your resume" needs resume evidence; portfolio proof means the skill
+    # is evidenced-missing, which is the bucket tailoring is allowed to add from.
+    evidence = [
+        make_evidence("resume-skills-001", "resume", "Resume skills: Python"),
+        make_evidence("portfolio-P1", "portfolio", "Kafka pipeline work", tags=["Kafka"]),
+    ]
+    inp = _base_input(evidence=evidence)
+    output = FitAnalysisOutput(
+        job_id="J1",
+        aligned_skills=[EvidenceClaim(claim="Kafka: aligned", evidence_ids=["portfolio-P1"])],
+    )
+    result, repairs = post_validate(output, inp)
+    assert result.aligned_skills == []
+    assert [c.claim.split(":")[0] for c in result.evidenced_missing_skills] == ["Kafka"]
+    assert "not yet on your resume" in result.evidenced_missing_skills[0].claim
+    assert any("no resume evidence" in r for r in repairs)
+
+
 def test_buckets_are_made_disjoint_by_priority() -> None:
     inp = _base_input()
     output = FitAnalysisOutput(

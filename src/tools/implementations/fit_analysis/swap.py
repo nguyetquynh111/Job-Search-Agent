@@ -52,14 +52,55 @@ def normalize_name(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", name.lower()).strip()
 
 
-def _matches(tokens: list[str], text: str) -> list[str]:
-    """Return the tokens whose words appear (word-boundary) in text."""
+# Grammatical glue, dropped before comparing a phrase to the job text.
+_PHRASE_STOPWORDS = {"and", "or", "of", "for", "the", "a", "an", "with", "in", "to", "on"}
 
-    haystack = re.sub(r"[^a-z0-9]+", " ", text.lower())
+# Words that carry no domain signal on their own: a phrase is never considered a
+# match on the strength of these alone, so a shared "data" or "learning" cannot
+# manufacture domain alignment. Explicit list, consistent with this module's
+# no-fuzzy-matching policy. Stored in stemmed form (see ``_stem``).
+_WEAK_PHRASE_WORDS = {
+    "ai", "data", "deep", "real", "time", "web", "system", "platform", "analysis",
+    "engineering", "computer", "learning", "model", "science", "technology",
+    "application", "service", "intelligence", "general", "support", "based",
+    "using", "product", "solution", "software", "development", "digital", "tool",
+    "framework", "quality",
+}
+
+
+def _stem(word: str) -> str:
+    """Strip a trailing plural 's' so "systems" and "system" compare equal."""
+
+    return word[:-1] if len(word) > 4 and word.endswith("s") else word
+
+
+def _content_words(phrase: str) -> list[str]:
+    """Return a phrase's stemmed content words, without grammatical glue."""
+
+    words = [w for w in re.split(r"[^a-z0-9]+", phrase.lower()) if w]
+    return [_stem(w) for w in words if w not in _PHRASE_STOPWORDS]
+
+
+def _matches(tokens: list[str], text: str) -> list[str]:
+    """Return the tokens whose content words sufficiently overlap ``text``.
+
+    Whole-phrase containment was too strict to be defensible: a portfolio domain of
+    "Recommendation and Ranking" scored zero against a posting asking for
+    "recommendation systems", so a genuinely relevant project lost to an unrelated
+    one. A phrase now matches when at least half of its content words appear
+    (word-boundary, plural-stemmed) AND at least one matched word carries real
+    signal, which keeps shared filler words from counting as alignment.
+    """
+
+    haystack = {_stem(w) for w in re.split(r"[^a-z0-9]+", text.lower()) if w}
     found: list[str] = []
     for token in tokens:
-        needle = re.sub(r"[^a-z0-9]+", " ", token.lower()).strip()
-        if needle and re.search(rf"(?<![a-z0-9]){re.escape(needle)}(?![a-z0-9])", haystack):
+        words = _content_words(token)
+        if not words:
+            continue
+        hit = [word for word in words if word in haystack]
+        needed = (len(words) + 1) // 2
+        if len(hit) >= needed and any(word not in _WEAK_PHRASE_WORDS for word in hit):
             found.append(token)
     return found
 
@@ -261,3 +302,123 @@ def build_project_swap(
         weak_slot_notes=weak_slot_notes,
         unbound=unbound,
     )
+
+
+def score_for(decision: SwapDecision, project_id: str) -> float:
+    """Return a project's relevance score from an existing ranking."""
+
+    for item in decision.rankings:
+        if item.project.project_id == project_id:
+            return item.score
+    return 0.0
+
+
+def resolve_portfolio_project(
+    reference: str | None, portfolio_projects: list[PortfolioProject]
+) -> PortfolioProject | None:
+    """Resolve a portfolio project by ``project_id`` or by name, or return None."""
+
+    if not reference:
+        return None
+    literal = reference.strip().lower()
+    for project in portfolio_projects:
+        if project.project_id.strip().lower() == literal:
+            return project
+    key = normalize_name(reference)
+    for project in portfolio_projects:
+        if normalize_name(project.name) == key:
+            return project
+    return None
+
+
+def validate_proposed_swap(
+    decision: SwapDecision,
+    remove_project: str | None,
+    add_project: str | None,
+    current_names: list[str],
+    portfolio_projects: list[PortfolioProject],
+) -> tuple[PortfolioProject | None, str | None, str | None]:
+    """Validate an externally proposed swap against the portfolio and the ranking.
+
+    Returns ``(add, resolved_remove_name, rejection_reason)``. A proposal is accepted
+    only when the add-project exists in the portfolio, is not already on the resume,
+    the remove-project is a current resume project, and the add beats the outgoing
+    project by :data:`SWAP_MIN_MARGIN` under the same ranking the deterministic path
+    uses -- so an accepted proposal is never weaker than what the tool would pick.
+    """
+
+    add = resolve_portfolio_project(add_project, portfolio_projects)
+    if add is None:
+        return None, None, f"add_project {add_project!r} is not in the portfolio"
+
+    current_by_key = {normalize_name(name): name for name in current_names}
+    if normalize_name(add.name) in current_by_key:
+        return None, None, f"add_project {add.name!r} is already a current resume project"
+
+    resolved_remove = current_by_key.get(normalize_name(remove_project or ""))
+    if resolved_remove is None:
+        return None, None, f"remove_project {remove_project!r} is not a current resume project"
+
+    outgoing = next(
+        (c for c in decision.current_verdicts if c.name == resolved_remove and c.project), None
+    )
+    if outgoing is None or outgoing.project is None:
+        return None, None, f"remove_project {resolved_remove!r} has no portfolio counterpart to score"
+
+    margin = score_for(decision, add.project_id) - score_for(decision, outgoing.project.project_id)
+    if margin < SWAP_MIN_MARGIN:
+        return None, None, (
+            f"{add.name!r} does not beat {resolved_remove!r} by the required margin "
+            f"(delta={margin:.2f}, minimum={SWAP_MIN_MARGIN})"
+        )
+    return add, resolved_remove, None
+
+
+def choose_swap(
+    decision: SwapDecision,
+    remove_name: str,
+    add: PortfolioProject,
+    rationale: str | None = None,
+) -> SwapDecision:
+    """Return a SwapDecision reflecting an externally chosen (remove, add) pair.
+
+    The chosen outgoing project is re-marked as the weak one on the SAME shared
+    ranking, so ``project_analysis`` and the swap still cannot disagree: whatever
+    project is recommended for removal is reported as the weak slot, never as
+    "aligns well".
+    """
+
+    add_score = next(
+        (item for item in decision.rankings if item.project.project_id == add.project_id), None
+    )
+    for entry in decision.current_verdicts:
+        if entry.project is None:
+            continue
+        if entry.name == remove_name:
+            entry.removed = True
+            entry.verdict = verdict.MISMATCH
+        else:
+            entry.removed = False
+            entry.verdict = (
+                verdict.MATCH if (entry.distinctive or entry.domain_matches) else verdict.PARTIAL
+            )
+
+    if add_score is None:
+        return decision
+    default_rationale = (
+        f"'{add.name}' offers {_tech_phrase(add_score)}, {_domain_phrase(add_score)}, and "
+        f"{_industry_phrase(add_score)} — a better match than '{remove_name}' for this role."
+    )
+    decision.swap = ProjectSwap(
+        remove_project=remove_name,
+        add_project=add.name,
+        rationale=rationale or default_rationale,
+        evidence_ids=list(add.evidence_ids),
+    )
+    decision.weak_slot_notes = [
+        f"Resume project '{c.name}' is also a weak match, but only one swap "
+        f"is recommended per job."
+        for c in decision.current_verdicts
+        if c.project is not None and c.name != remove_name and c.score <= add_score.score / 2
+    ]
+    return decision

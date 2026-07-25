@@ -51,25 +51,61 @@ def post_validate(
     known_ids = {item.evidence_id for item in inp.evidence_items}
     kind_of = {item.evidence_id: source_kind(item.source) for item in inp.evidence_items}
 
-    # --- aligned ---
+    # --- aligned (a pass marker REQUIRES resume evidence) ---
+    # Mirrors the evidenced-missing demotion below so no bucket can assert an
+    # ungrounded claim: "already on your resume" needs a resume-sourced citation,
+    # evidence from elsewhere means the skill is evidenced-missing instead, and no
+    # valid citation at all means the tool found no support for it.
     aligned: list[EvidenceClaim] = []
+    promoted_to_missing: list[EvidenceClaim] = []
+    demoted_from_aligned: list[EvidenceClaim] = []
     for claim in output.aligned_skills:
         ids = _valid_ids(claim, known_ids, repairs)
         sources = {kind_of[i] for i in ids}
-        aligned.append(
-            claim.model_copy(
-                update={
-                    "evidence_ids": ids,
-                    "confidence": confidence.skill_confidence(sources, on_resume=True),
-                    "notes": _reverdict(claim.notes, verdict.MATCH),
-                }
+        skill = claim.claim.split(":", 1)[0]
+        if confidence.RESUME in sources:
+            aligned.append(
+                claim.model_copy(
+                    update={
+                        "evidence_ids": ids,
+                        "confidence": confidence.skill_confidence(sources, on_resume=True),
+                        "notes": _reverdict(claim.notes, verdict.MATCH),
+                    }
+                )
             )
-        )
+        elif ids:
+            where = ", ".join(sorted(sources))
+            repairs.append(
+                f"moved '{skill}' from aligned to evidenced_missing (no resume evidence)"
+            )
+            promoted_to_missing.append(
+                claim.model_copy(
+                    update={
+                        "claim": (
+                            f"{skill}: required by the job, not yet on your resume, "
+                            f"but evidenced in {where}."
+                        ),
+                        "evidence_ids": ids,
+                    }
+                )
+            )
+        else:
+            repairs.append(f"demoted '{skill}' from aligned to genuine_gaps (no valid evidence)")
+            demoted_from_aligned.append(
+                EvidenceClaim(
+                    claim=f"{skill}: required by the job with no valid supporting evidence.",
+                    evidence_ids=[],
+                    confidence=confidence.skill_confidence(set(), on_resume=False),
+                    notes=verdict.tag(
+                        verdict.MISMATCH, "Demoted from aligned during post-validation."
+                    ),
+                )
+            )
 
     # --- evidenced-missing (demote to gaps when no valid evidence remains) ---
     evidenced_missing: list[EvidenceClaim] = []
     demoted: list[EvidenceClaim] = []
-    for claim in output.evidenced_missing_skills:
+    for claim in [*output.evidenced_missing_skills, *promoted_to_missing]:
         ids = _valid_ids(claim, known_ids, repairs)
         if not ids:
             skill = claim.claim.split(":", 1)[0]
@@ -98,7 +134,7 @@ def post_validate(
 
     # --- genuine gaps ---
     genuine_gaps: list[EvidenceClaim] = []
-    for claim in [*output.genuine_gaps, *demoted]:
+    for claim in [*output.genuine_gaps, *demoted, *demoted_from_aligned]:
         ids = _valid_ids(claim, known_ids, repairs)
         genuine_gaps.append(
             claim.model_copy(

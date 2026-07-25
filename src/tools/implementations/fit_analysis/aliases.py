@@ -90,6 +90,22 @@ def category_members(canonical: str) -> set[str]:
     return CATEGORY_SKILLS.get(canonical, set())
 
 
+def curated_vocabulary() -> set[str]:
+    """Return every canonical token this module knows by name.
+
+    Used to scan free-text evidence (a resume education or experience line) for
+    skills that carry no tag of their own. Deliberately bounded to the curated
+    alias and category maps so scanning cannot flood the index with noise; the
+    caller adds the job's own required skills on top.
+    """
+
+    vocabulary: set[str] = set(CANONICAL_ALIASES)
+    for category, members in CATEGORY_SKILLS.items():
+        vocabulary.add(category)
+        vocabulary.update(canonicalize(member) for member in members)
+    return vocabulary
+
+
 def variants(canonical: str) -> set[str]:
     """Return every surface form (canonical plus aliases) for a canonical token."""
 

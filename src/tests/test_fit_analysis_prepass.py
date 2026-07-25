@@ -38,6 +38,52 @@ def test_ordered_ids_prefers_resume_then_portfolio() -> None:
     assert ordered[2] == "portfolio-P1"
 
 
+_EDUCATION_LINE = (
+    "Pacifica Institute of Science | Houston, TX | M.S. Data Science (3.64/4.0) | "
+    "B.S. Math & Computer Science (3.44/4.0) | 2021--2023 | 2017--2021"
+)
+
+
+def test_education_line_can_ground_a_skill_claim() -> None:
+    # The tag says which resume SECTION the item came from, never which skills it
+    # mentions, so the text must be scanned or a degree can never ground a claim.
+    items = [make_evidence("resume-education-002", "resume", _EDUCATION_LINE, tags=["education"])]
+    index = build_evidence_index(items, vocabulary={"data science"})
+
+    assert index.has("data science")
+    assert index.ids_for("data science") == ["resume-education-002"]
+    assert index.sources_for("data science") == {"resume"}
+
+
+def test_education_evidenced_skill_is_not_reported_as_a_gap() -> None:
+    job = make_job(required_skills=["data science"])
+    profile = make_profile(skills=[])
+    items = [make_evidence("resume-education-002", "resume", _EDUCATION_LINE, tags=["education"])]
+    inp = make_input(job, profile, items)
+    prepass = run_prepass(
+        inp, build_evidence_index(items, vocabulary={"data science"})
+    )
+
+    assert [c.skill for c in prepass.genuine_gaps] == []
+    grounded = [*prepass.aligned, *prepass.evidenced_missing]
+    assert [c.skill for c in grounded] == ["data science"]
+    assert grounded[0].evidence_ids == ["resume-education-002"]
+
+
+def test_whole_resume_blob_is_not_text_scanned() -> None:
+    # Scanning a full document would mark nearly every skill as resume-present, so
+    # only short section-tagged items are scanned.
+    blob = make_evidence(
+        "resume-upload-001",
+        "resume",
+        "Avery Morgan. Summary: data science and kubernetes and pytorch everywhere. " * 20,
+        tags=["resume"],
+    )
+    index = build_evidence_index([blob], vocabulary={"data science"})
+    assert not index.has("data science")
+    assert not index.has("kubernetes")
+
+
 def test_skill_buckets_are_split_correctly() -> None:
     job = make_job(required_skills=["Python", "PyTorch", "Rust"])
     profile = make_profile(skills=["Python"])  # only Python on the resume

@@ -4,9 +4,12 @@ Entry point loaded by ``src.tools.registry``:
 
     analyze_fit(inp: AnalyzeFitInput) -> FitAnalysisOutput
 
-Pipeline: sanitize + index evidence -> deterministic pre-pass -> LLM reasoning
-(or deterministic fallback when no model is configured) -> post-validation. The
-run's single trace is owned by orchestration; this tool only emits a nested span.
+Pipeline: sanitize + index evidence -> deterministic pre-pass (grounding and
+fallback) -> LLM reasoning proposes the fit judgments -> deterministic guards
+validate that proposal (``merge.py``) -> post-validation enforces grounding. With
+no model configured, a failed call, or an unvalidatable proposal, the pre-pass
+supplies the entire analysis. The run's single trace is owned by orchestration;
+this tool only emits a nested span.
 """
 
 from __future__ import annotations
@@ -17,12 +20,14 @@ from src.observability.trace_manager import TraceManager
 from src.schemas.fit_analysis import AnalyzeFitInput, FitAnalysisOutput
 from src.tools.implementations.fit_analysis import (
     llm_client,
+    merge,
     postvalidate,
     rationale,
     reasoning,
 )
 from src.tools.implementations.fit_analysis.evidence_index import build_evidence_index
 from src.tools.implementations.fit_analysis.prepass import (
+    _expand_canonicals,
     build_project_section,
     build_skill_section,
     run_prepass,
@@ -50,34 +55,56 @@ def analyze_fit(
         {"tool_name": "analyze_fit", "job_id": inp.job.job_id, "company": inp.job.company},
     )
     try:
-        index = build_evidence_index(inp.evidence_items)
+        # The job's own required skills join the scan vocabulary so a requirement
+        # named only in a resume education/experience line (e.g. "M.S. Data
+        # Science" grounding "data science") is found rather than called a gap.
+        index = build_evidence_index(
+            inp.evidence_items, vocabulary=set(_expand_canonicals(inp.job.required_skills))
+        )
         prepass = run_prepass(inp, index)
         output, path_label, meta = reasoning.analyze(inp, prepass, index, complete_fn=complete_fn)
-        # Candidate facts are DECIDED deterministically so the model cannot rewrite
-        # them and correctness is guaranteed on both paths: the three skill buckets
-        # (an evidence lookup, incl. category->member resolution), projects (one
-        # shared ranking, so the swap and project_analysis can never disagree), and
-        # seniority (a year comparison). On the LLM path the model then writes only
-        # the *prose* for the fixed seniority/swap outcomes, constrained to the
-        # decision, with a template fallback. The LLM owns experience and education.
-        aligned, evidenced_missing, genuine_gaps = build_skill_section(prepass)
-        seniority = prepass.seniority
-        project_analysis, project_swap = build_project_section(prepass)
+        # The MODEL makes the fit judgments; deterministic code guards them. On the
+        # LLM path its buckets and swap are kept and then validated (every required
+        # skill covered, the swap real and materially better) -- see merge.py. When
+        # no model is configured, or the call fails, or its proposal cannot be
+        # validated, the deterministic pre-pass supplies the whole analysis, so
+        # today's behaviour is the floor and never the ceiling.
+        merge_repairs: list[str] = []
         if path_label == "llm":
+            output, merge_repairs, model_chose_swap = merge.merge_llm_proposal(
+                output, inp, prepass
+            )
             active_complete = complete_fn or llm_client.complete
-            seniority = rationale.enrich_seniority(seniority, active_complete)
-            project_swap = rationale.enrich_swap(project_swap, prepass, inp, active_complete)
-        output = output.model_copy(
-            update={
-                "aligned_skills": aligned,
-                "evidenced_missing_skills": evidenced_missing,
-                "genuine_gaps": genuine_gaps,
-                "seniority": seniority,
-                "project_analysis": project_analysis,
-                "project_swap": project_swap,
-            }
-        )
+            updates: dict[str, object] = {}
+            if not output.seniority:
+                # The model omitted seniority: take the deterministic finding and let
+                # the model phrase it, rejecting prose that contradicts the verdict.
+                updates["seniority"] = rationale.enrich_seniority(
+                    prepass.seniority, active_complete
+                )
+            if output.project_swap is not None and not model_chose_swap:
+                # The swap came from the ranking, so its rationale is templated prose;
+                # the model rewrites it, constrained to the already-decided project.
+                updates["project_swap"] = rationale.enrich_swap(
+                    output.project_swap, prepass, inp, active_complete
+                )
+            if updates:
+                output = output.model_copy(update=updates)
+        else:
+            aligned, evidenced_missing, genuine_gaps = build_skill_section(prepass)
+            project_analysis, project_swap = build_project_section(prepass.swap)
+            output = output.model_copy(
+                update={
+                    "aligned_skills": aligned,
+                    "evidenced_missing_skills": evidenced_missing,
+                    "genuine_gaps": genuine_gaps,
+                    "seniority": prepass.seniority,
+                    "project_analysis": project_analysis,
+                    "project_swap": project_swap,
+                }
+            )
         validated, repairs = postvalidate.post_validate(output, inp)
+        repairs = [*merge_repairs, *repairs]
     except Exception as exc:
         active.end_span(span_id, status="ERROR", error_type=exc.__class__.__name__)
         logger.exception("Fit analysis failed for %s", inp.job.job_id)

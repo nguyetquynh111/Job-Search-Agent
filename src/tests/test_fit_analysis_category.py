@@ -81,7 +81,7 @@ def test_weak_swap_below_margin_is_suppressed() -> None:
     )
     assert pp.swap.swap is None
     from src.tools.implementations.fit_analysis.prepass import build_project_section
-    claims, swap = build_project_section(pp)
+    claims, swap = build_project_section(pp.swap)
     assert swap is None
     assert any("no project swap is recommended" in c.claim.lower() for c in claims)
 

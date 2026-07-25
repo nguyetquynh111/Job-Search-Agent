@@ -435,15 +435,18 @@ def build_skill_section(
     )
 
 
-def build_project_section(prepass: PrePass) -> tuple[list[EvidenceClaim], ProjectSwap | None]:
+def build_project_section(
+    swap: SwapDecision | None,
+) -> tuple[list[EvidenceClaim], ProjectSwap | None]:
     """Build project_analysis claims and the swap from the one shared ranking.
 
-    Because both come from ``prepass.swap``, the project reported as removed is the
-    one ranked weakest and is never simultaneously reported as strongly aligned.
+    Both come from the same :class:`SwapDecision`, so the project reported as
+    removed is the one that decision marked weak and is never simultaneously
+    reported as strongly aligned -- whether that project was chosen by the ranking
+    or accepted from the model.
     """
 
     claims: list[EvidenceClaim] = []
-    swap = prepass.swap
     if swap is None:
         return claims, None
 
@@ -512,7 +515,7 @@ def build_project_section(prepass: PrePass) -> tuple[list[EvidenceClaim], Projec
 def build_fallback_output(inp: AnalyzeFitInput, prepass: PrePass) -> FitAnalysisOutput:
     """Assemble a complete FitAnalysisOutput from the deterministic pre-pass alone."""
 
-    project_analysis, project_swap = build_project_section(prepass)
+    project_analysis, project_swap = build_project_section(prepass.swap)
     aligned, evidenced_missing, genuine_gaps = build_skill_section(prepass)
     return FitAnalysisOutput(
         job_id=inp.job.job_id,

@@ -30,7 +30,13 @@ A required skill appears in **exactly one** bucket:
 
 Absence of a skill from the resume alone is **never** sufficient to call it a genuine gap — the
 tool checks the portfolio, master skills, and memory first. Missing evidence must not be treated
-as a gap.
+as a gap. Resume **education** and **experience** lines count as evidence too, so a degree in a
+required field grounds that skill rather than leaving it a gap.
+
+Every bucket is grounded: an `aligned_skills` claim always cites at least one **resume-sourced**
+evidence ID, and an `evidenced_missing_skills` claim always cites at least one real evidence ID.
+A claim that cannot meet its bucket's bar is demoted during post-validation, so no pass marker is
+ever asserted without a citation.
 
 **Category skills.** A required *capability* (e.g. `agents`, `APIs`, `cloud deployment`, `deep
 learning`) is satisfied by evidence of a concrete member *tool* (`AutoGen`, `FastAPI`, `Docker`,

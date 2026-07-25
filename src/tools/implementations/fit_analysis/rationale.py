@@ -55,13 +55,13 @@ def enrich_seniority(
         logger.warning("Seniority rationale LLM call failed; keeping template: %s", exc)
         return claims
 
-    if not _seniority_prose_ok(prose, value):
+    if not seniority_prose_ok(prose, value):
         logger.info("Seniority rationale rejected (contradicts verdict); keeping template.")
         return claims
     return [claim.model_copy(update={"claim": prose})]
 
 
-def _seniority_prose_ok(prose: str, value: str | None) -> bool:
+def seniority_prose_ok(prose: str, value: str | None) -> bool:
     """Reject prose that is empty, too long, or contradicts the fixed verdict."""
 
     if not prose or len(prose) > _MAX_RATIONALE_CHARS:

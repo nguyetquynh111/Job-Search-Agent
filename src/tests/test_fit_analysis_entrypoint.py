@@ -31,6 +31,18 @@ def test_analyze_fit_runs_offline(monkeypatch) -> None:
         assert set(claim.evidence_ids) <= known
 
 
+def test_no_pass_marker_is_rendered_without_evidence(monkeypatch) -> None:
+    # Resume skills alone (no EvidenceItem to cite) must not yield a ✅ claim.
+    monkeypatch.setattr(llm_client, "model_configured", lambda: False)
+    job = make_job(required_skills=["Python", "SQL"])
+    profile = make_profile(skills=["Python", "SQL"])
+    result = entry.analyze_fit(make_input(job, profile, evidence_items=[]))
+
+    assert [c for c in result.aligned_skills if not c.evidence_ids] == []
+    for claim in [*result.aligned_skills, *result.evidenced_missing_skills]:
+        assert claim.evidence_ids, "every non-gap claim must cite real evidence"
+
+
 def test_no_better_swap_available_is_stated(monkeypatch) -> None:
     monkeypatch.setattr(llm_client, "model_configured", lambda: False)
     job = make_job(required_skills=["Python"])

@@ -12,34 +12,63 @@ The controller calls it once per Top-3 job, before any resume tailoring.
 
 ## How it works
 
-Hybrid: a deterministic core (pure, fully unit-tested) plus optional LLM reasoning, unified by a
-post-validation pass that runs on **both** paths.
+**The model makes the fit judgments; deterministic code guards them.** The architecture is
+*propose → validate → fall back*: an LLM proposes the whole analysis, deterministic checks enforce
+the invariants the spec requires, and a pure deterministic pass supplies everything when no model is
+available. The deterministic pass is a floor, never a ceiling.
 
 1. **Sanitize + index** (`sanitize.py`, `evidence_index.py`). Job text is stripped of mojibake
    (see below). Every evidence item is indexed as `canonical_skill -> [(evidence_id, source_kind)]`.
    Source kinds: `resume`, `master_skills`, `portfolio`, `memory`. Memory is first-class evidence.
+   Short section items (`education`, `experience`, `project`) carry a tag naming their resume
+   *section*, not their skills, so their text is scanned against a bounded vocabulary — the curated
+   alias/category tokens plus the job's own required skills. That is why an `M.S. Data Science`
+   line can ground a `data science` claim. The whole-resume upload blob is deliberately **not**
+   scanned: indexing every vocabulary hit in a full document would mark almost every skill as
+   resume-present.
 2. **Deterministic pre-pass** (`prepass.py`, `swap.py`). Computes the three disjoint skill buckets,
-   relevant experience, seniority, education, project ranking, and the single project swap — purely
-   from evidence. This is both the LLM's grounding and the complete offline fallback.
+   relevant experience, seniority, education, project ranking, and a candidate project swap — purely
+   from evidence. It serves three jobs: grounding supplied to the prompt, the completeness backstop,
+   and the entire offline fallback.
 3. **LLM reasoning** (`reasoning.py`, `prompts.py`, `llm_client.py`). Sends the sanitized job,
    candidate, portfolio, and evidence index to the model and requests strict JSON matching
    `FitAnalysisOutput` at `temperature=0`, retrying once with the validation error appended. The
-   model reasons only over supplied facts and never emits a numeric match score. The LLM owns the
-   contrastive **relevant-experience** narrative and the **education** claims.
-4. **Deterministic facts override.** Candidate facts are computed deterministically and override the
-   model so it cannot rewrite them and correctness holds on both paths: the **three skill buckets**
-   (an evidence lookup with category→member resolution, see below), **seniority** (a candidate-years
-   vs required-years comparison), and the **project section** (`project_analysis` + `project_swap`,
-   both from one shared ranking so they can never disagree — a project recommended for removal is, by
-   construction, the one ranked weakest and is reported as weak, never "aligns well"). On the LLM path
-   the model then writes the constrained *prose* for the fixed seniority/swap outcomes.
-5. **Deterministic fallback** (required). When no model is configured, or the LLM call fails after
-   its retry, the analysis is built entirely from the pre-pass. The chosen path (`llm` / `fallback`)
-   is logged and recorded in the span.
-6. **Post-validation** (`postvalidate.py`). Drops cited evidence IDs that do not exist; demotes an
-   `evidenced_missing` skill with no valid evidence to `genuine_gaps`; enforces bucket disjointness;
-   nulls a swap referencing a non-existent project; forces `job_id`; assigns confidence by the
-   documented rule; and forces each claim's verdict (see below). Every repair is logged.
+   model reasons only over supplied facts and never emits a numeric match score.
+4. **Merge with guards** (`merge.py`). On the LLM path the model's own judgments are **kept** —
+   its three-bucket assignment, its `project_swap` choice, its experience/education/seniority
+   narrative. Three guards then apply:
+   - *Completeness.* Every required skill must land in exactly one bucket; any requirement the model
+     omitted is filled from the pre-pass, so an LLM proposal can never be less complete than the
+     fallback.
+   - *Swap safety.* The model's `add_project` is honoured only if it exists in the portfolio, is not
+     already on the resume, and beats the outgoing project by `SWAP_MIN_MARGIN` under the same
+     ranking. Otherwise the ranked choice is used and the rejection reason is logged. Either way the
+     project section is rebuilt from that one shared ranking, so a project recommended for removal is
+     reported as the weak slot and never as "aligns well" — including when the model chose it.
+   - *Seniority consistency.* The model's seniority prose is kept only if it does not contradict the
+     deterministic years verdict; the verdict tag itself is always computed, never taken on trust.
+5. **Deterministic fallback** (required). When no model is configured, the LLM call fails after its
+   retry, or its output cannot be parsed, the analysis is built entirely from the pre-pass. The chosen
+   path (`llm` / `fallback`) is logged and recorded in the span.
+6. **Post-validation** (`postvalidate.py`), on **both** paths. Drops cited evidence IDs that do not
+   exist; requires a **resume-sourced** citation for any `aligned` claim (evidence from elsewhere
+   moves the skill to `evidenced_missing`, no valid evidence at all demotes it to `genuine_gaps`);
+   demotes an `evidenced_missing` skill with no valid evidence to `genuine_gaps`; enforces bucket
+   disjointness; nulls a swap referencing a non-existent project; forces `job_id`; assigns confidence
+   by the documented rule; and forces each claim's verdict (see below). No bucket can assert an
+   ungrounded claim. Every repair is logged.
+
+### Which dimensions are LLM-reasoned
+
+| Dimension | Who decides | Deterministic guard |
+| --- | --- | --- |
+| Relevant experience | LLM | evidence IDs must exist |
+| Education | LLM | evidence IDs must exist |
+| Core skills (3 buckets) | LLM | every required skill covered; aligned needs resume evidence; buckets disjoint |
+| Seniority | LLM writes the prose | verdict computed from years; contradicting prose replaced |
+| Projects + swap | LLM picks the swap | target must be real, not already on the resume, and beat the margin |
+
+On the fallback path every row above is produced by the deterministic pre-pass instead.
 
 ## Verdict markers and rendering
 
@@ -106,8 +135,11 @@ observed across `data/portfolio.txt`, `data/resume.tex`, and `data/jobs.csv` plu
   (never invented). Combined labels like `Docker/Kubernetes` or `GenAI/LLMs` are split on `/` and
   `and`, and resolve if any part resolves.
 
-Skill bucketing is therefore a deterministic evidence lookup and, like seniority and the project
-section, **overrides the model** — the LLM cannot turn an evidenced skill into a gap or vice versa.
+Category resolution is what the deterministic pre-pass uses to bucket skills, and it is also how an
+omitted requirement is backfilled. It no longer overrides the model: on the LLM path the model's own
+bucket assignment stands, and post-validation checks its *grounding* rather than substituting its
+judgment — an `aligned` skill must cite resume evidence, an `evidenced_missing` skill must cite a real
+evidence ID, and anything failing is demoted with a logged repair.
 
 ## Swap identifier convention and threshold
 
@@ -116,13 +148,22 @@ from `portfolio.txt`; the `P0x` ID is recoverable from `evidence_ids` (`portfoli
 `swap.build_project_swap`. **The tailoring tool owner must agree to this convention** — it is
 documented as the contract in [OUTPUT.md](OUTPUT.md) with a worked example.
 
-A swap is recommended **only** when the best external candidate beats the incumbent it would replace
-by at least `swap.SWAP_MIN_MARGIN = 2.0`. The score scale is one distinctive-skill match = 2.0, so a
-swap must add at least one full distinctive dimension (a required skill or a domain/industry axis) the
+A swap is recommended **only** when the incoming project beats the incumbent it would replace by at
+least `swap.SWAP_MIN_MARGIN = 2.0`. The score scale is one distinctive-skill match = 2.0, so a swap
+must add at least one full distinctive dimension (a required skill or a domain/industry axis) the
 outgoing project lacks. Below that margin the tool recommends **no swap** and states the current
-projects are already the best available — a barely-better project is worse than none. Project scoring
-uses the same category/slash expansion as the skill buckets, so a project's FastAPI counts toward a
-job's "APIs".
+projects are already the best available — a barely-better project is worse than none. The same margin
+gates the model's own pick, so accepting the model's choice can never produce a weaker swap than the
+ranking would. Project scoring uses the same category/slash expansion as the skill buckets, so a
+project's FastAPI counts toward a job's "APIs".
+
+**Domain/industry phrase matching.** A portfolio domain matches the posting when at least half of its
+content words appear (word-boundary, plural-stemmed) **and** at least one matched word carries real
+signal — `swap._WEAK_PHRASE_WORDS` lists the filler words (`data`, `learning`, `platform`, `system`,
+…) that never establish alignment on their own. Whole-phrase containment was too strict to be
+defensible: it scored the portfolio's `Recommendation and Ranking` project at zero against a posting
+requiring `recommendation systems`, while an unrelated medical project won on the literal string
+`Deep Learning`. Pinned by `src/tests/test_fit_analysis_ranking.py`.
 
 ## Running standalone
 

@@ -63,6 +63,32 @@ evidenced_missing_skills, genuine_gaps, project_analysis \
 project_swap (null or {"remove_project": string or null, "add_project": string, \
 "rationale": string, "evidence_ids": [string]}).
 Format each skill claim as "<Skill>: <reason>".
+
+EVERY one of those seven fields is a JSON ARRAY, even when it holds exactly one \
+element — write "seniority": [{...}], NEVER "seniority": {...}. Only project_swap \
+is an object or null. Shape of a valid response:
+
+{"job_id": "J001",
+ "relevant_experience": [{"claim": "Senior AI Engineer at Acme: centered on \
+production RAG delivery — strong overlap with this posting's LLM focus, weaker on \
+its streaming requirement.", "evidence_ids": ["resume-experience-002"], \
+"confidence": 0.9, "notes": "verdict=partial; strong LLM overlap, no streaming"}],
+ "seniority": [{"claim": "Seniority: ~4 years vs job (5+ years expected).", \
+"evidence_ids": ["resume-experience-001"], "confidence": 0.8, "notes": \
+"verdict=partial; below the stated experience"}],
+ "education": [{"claim": "Education: M.S. Data Science", "evidence_ids": \
+["resume-education-002"], "confidence": 0.8, "notes": "verdict=match; relevant degree"}],
+ "aligned_skills": [{"claim": "Python: required by the job and on your resume.", \
+"evidence_ids": ["resume-skills-001"], "confidence": 0.9, "notes": "verdict=match"}],
+ "evidenced_missing_skills": [{"claim": "agents: evidenced in portfolio via AutoGen.", \
+"evidence_ids": ["portfolio-P03"], "confidence": 0.7, "notes": "verdict=missing; via AutoGen"}],
+ "genuine_gaps": [{"claim": "Spark: required by the job with no supporting evidence.", \
+"evidence_ids": [], "confidence": 0.75, "notes": "verdict=mismatch; no evidence anywhere"}],
+ "project_analysis": [{"claim": "Current project 'X' has limited alignment.", \
+"evidence_ids": ["portfolio-P05"], "confidence": 0.7, "notes": "verdict=partial"}],
+ "project_swap": {"remove_project": "X", "add_project": "Y", "rationale": "Y matches \
+the job's technology, domain, and industry more closely than X.", "evidence_ids": \
+["portfolio-P02"]}}
 """
 
 
