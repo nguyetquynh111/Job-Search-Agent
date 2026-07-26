@@ -5,6 +5,12 @@ preferences:
   preferred_locations:
     - Houston, TX
     - Remote, US
+    - Washington, DC
+    - Arlington, VA
+    - Baltimore, MD
+    - New York, NY
+    - San Francisco, CA
+    - Boston, MA
   remote_only: false
   companies_to_exclude: []
   target_job_titles:
