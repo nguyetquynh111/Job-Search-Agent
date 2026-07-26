@@ -14,6 +14,7 @@ import streamlit as st
 
 from app.configuration import get_config, validate_runtime_requirements
 from src.review.memory import JSONMemoryStore
+from src.utils.paths import memory_path_for_run
 
 DEFAULT_INPUT_PATHS = {
     "jobs_path": "data/demo_jobs.csv",
@@ -62,7 +63,9 @@ def start_graph_run(app: Any, session: SessionMapping) -> dict[str, Any]:
     from src.agent import create_initial_state
 
     paths = session.get("input_paths", DEFAULT_INPUT_PATHS)
-    memory_file = get_config().memory_file
+    run_id = str(session.get("current_run_id") or f"run-{uuid4().hex[:12]}")
+    session["current_run_id"] = run_id
+    memory_file = memory_path_for_run(run_id)
     JSONMemoryStore(memory_file).load()
     state = create_initial_state(
         jobs_path=paths.get("jobs_path", DEFAULT_INPUT_PATHS["jobs_path"]),
@@ -74,6 +77,7 @@ def start_graph_run(app: Any, session: SessionMapping) -> dict[str, Any]:
             "portfolio_path", DEFAULT_INPUT_PATHS["portfolio_path"]
         ),
         memory_file=str(memory_file),
+        run_id=run_id,
     )
     result = invoke_new_run(app, state)
     store_graph_result(session, result)
@@ -163,11 +167,14 @@ def reset_demo_data(session: SessionMapping) -> None:
     """Reset UI state, memory file, and generated outputs."""
 
     config = get_config()
-    JSONMemoryStore(config.memory_file).reset()
+    configured_memory_file = Path(
+        session.get("input_paths", {}).get("memory_file", str(config.memory_file))
+    )
+    JSONMemoryStore(configured_memory_file).reset()
     output_dir = config.output_dir
     checkpoint_path = config.checkpoint_db.resolve()
     protected_runtime_files = {
-        config.memory_file.resolve(),
+        configured_memory_file.resolve(),
         checkpoint_path,
         Path(f"{checkpoint_path}-journal"),
         Path(f"{checkpoint_path}-shm"),

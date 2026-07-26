@@ -3,16 +3,22 @@ from __future__ import annotations
 import inspect
 import logging
 import re
-from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-from pydantic import Field
-
-from app.configuration import get_config
-from src.domain import ChangeLogEntry, EvidenceItem, Job, StrictBaseModel
-from src.tools.fit_analysis.fit_analysis import FitAnalysisOutput
+from src.domain import ChangeLogEntry, EvidenceItem
+from src.tools.resume_tailoring.contracts import (
+    PortfolioRecord,
+    SourceEdit,
+    TailorResumeInput,
+    TailorResumeOutput,
+    TailoringError,
+)
+from src.tools.resume_tailoring.compilation import (
+    compile_one_page,
+    output_paths as _output_paths,
+)
 from src.tools.resume_tailoring.latex_structure import (
     LatexItem,
     LatexStructureError,
@@ -35,7 +41,8 @@ from src.utils.job_evidence import (
     job_evidence_id,
     job_skill_evidence_id,
 )
-from src.utils.latex import escape_latex, pdf_page_count, pdflatex_command, run_pdflatex
+from src.utils.latex import escape_latex, run_pdflatex
+from src.utils.paths import job_output_dir
 from src.utils.skill_matching import (
     canonicalize,
     category_members,
@@ -46,62 +53,6 @@ from src.tracing.langfuse import TraceManager
 logger = logging.getLogger(__name__)
 
 _escape_latex = escape_latex
-
-
-class TailorResumeInput(StrictBaseModel):
-    """Input for tailor_resume."""
-
-    job: Job
-    fit_analysis: FitAnalysisOutput
-    source_resume_tex_path: str
-    candidate_evidence: list[EvidenceItem] = Field(default_factory=list)
-    job_evidence: list[EvidenceItem] = Field(default_factory=list)
-    revision_feedback: str | None = None
-
-
-class TailorResumeOutput(StrictBaseModel):
-    """Output from tailor_resume."""
-
-    job_id: str
-    status: str
-    output_tex_path: str
-    output_pdf_path: str
-    page_count: int = Field(ge=0)
-    change_log: list[ChangeLogEntry] = Field(default_factory=list)
-    revision_feedback_satisfied: bool | None = None
-    revision_feedback_checks: list[str] = Field(default_factory=list)
-    validation_failures: list[str] = Field(default_factory=list)
-    errors: list[str] = Field(default_factory=list)
-
-
-MAX_COMPILE_ATTEMPTS = 3
-
-
-class TailoringError(RuntimeError):
-    """Raised when a resume cannot be tailored without breaking its contract."""
-
-
-@dataclass(frozen=True)
-class PortfolioRecord:
-    """Portfolio fields needed to render a real project into the resume."""
-
-    project_id: str
-    name: str
-    period: str
-    technologies: list[str]
-    domain: str
-    summary: str
-    evidence_id: str
-
-
-@dataclass(frozen=True)
-class SourceEdit:
-    """A single authorized replacement in the original uploaded source."""
-
-    target: TextRange
-    replacement: str
-    category: str
-    location: str
 
 
 def run_resume_tailoring_tool(
@@ -151,7 +102,7 @@ def run_resume_tailoring_tool(
             validation_failures=validation_failures,
         )
     try:
-        output_dir = get_config().output_dir / inp.job.job_id
+        output_dir = job_output_dir(inp.job.job_id, run_id=inp.run_id)
         output_dir.mkdir(parents=True, exist_ok=True)
         tex_path, pdf_path = _output_paths(output_dir, source_path)
         before_pdf_path = output_dir / "resume_before.pdf"
@@ -450,22 +401,6 @@ def _failure(
         validation_failures=validation_failures or [],
         errors=errors,
     )
-
-
-def _output_paths(output_dir: Path, source_path: Path) -> tuple[Path, Path]:
-    """Use a new file for revisions so the previous approved source is untouched."""
-
-    try:
-        source_is_generated = source_path.resolve().parent == output_dir.resolve()
-    except OSError:
-        source_is_generated = False
-    if not source_is_generated:
-        stem = "resume_draft"
-    else:
-        match = re.fullmatch(r"resume-revision-(\d+)", source_path.stem)
-        revision = int(match.group(1)) + 1 if match else 1
-        stem = f"resume-revision-{revision}"
-    return output_dir / f"{stem}.tex", output_dir / f"{stem}.pdf"
 
 
 def _build_summary(
@@ -1624,96 +1559,17 @@ def _compile_one_page(
     *,
     tracer: TraceManager | None = None,
     trace_metadata: dict[str, object] | None = None,
-    revision: Callable[[str, int], str] | None = None,
+    revision: Any = None,
 ) -> tuple[int | None, list[str], str]:
-    active = tracer or TraceManager(enabled=False)
-    metadata = dict(trace_metadata or {})
-    errors: list[str] = []
-    working = source
-    page_count: int | None = None
-    for attempt in range(MAX_COMPILE_ATTEMPTS):
-        tex_path.write_text(working, encoding="utf-8")
-        compile_span = active.start_span(
-            "resume_tailoring.compile_pdf",
-            {**metadata, "attempt": attempt + 1},
-            input={
-                "engine": "pdflatex",
-                "command": pdflatex_command(tex_path),
-                "tex_file": tex_path.name,
-                "source_length": len(working),
-            },
-        )
-        run_errors = _run_pdflatex(tex_path)
-        if run_errors:
-            active.end_span(
-                compile_span,
-                status="ERROR",
-                error_type="LatexCompilationError",
-                output={
-                    "result": "error",
-                    "errors": run_errors,
-                    "pdf_created": pdf_path.is_file(),
-                },
-            )
-            return None, run_errors, working
-        pdf_created = pdf_path.is_file()
-        active.end_span(
-            compile_span,
-            status="OK" if pdf_created else "ERROR",
-            error_type=None if pdf_created else "MissingPdf",
-            output={
-                "result": "success" if pdf_created else "missing_pdf",
-                "pdf_created": pdf_created,
-                "pdf_file": pdf_path.name,
-            },
-        )
-        if not pdf_created:
-            return (
-                None,
-                ["pdflatex completed without producing the expected PDF."],
-                working,
-            )
-        verify_span = active.start_span(
-            "resume_tailoring.validate_page_count",
-            {**metadata, "attempt": attempt + 1},
-            input={"pdf_file": pdf_path.name, "required_page_count": 1},
-        )
-        try:
-            page_count = pdf_page_count(pdf_path)
-        except Exception as exc:  # noqa: BLE001 - report invalid generated PDFs
-            active.end_span(
-                verify_span,
-                status="ERROR",
-                error_type=exc.__class__.__name__,
-                output={"valid_pdf": False},
-            )
-            return None, [f"Generated resume PDF is invalid: {exc}"], working
-        active.end_span(
-            verify_span,
-            status="OK" if page_count == 1 else "ERROR",
-            error_type=None if page_count == 1 else "PageCountMismatch",
-            output={
-                "valid_pdf": True,
-                "page_count": page_count,
-                "exactly_one_page": page_count == 1,
-            },
-        )
-        if page_count == 1:
-            return 1, [], working
-        errors.append(
-            f"Resume compiled to {page_count} pages; exactly one is required."
-        )
-        if revision is not None and attempt + 1 < MAX_COMPILE_ATTEMPTS:
-            revised = revision(working, attempt + 1)
-            if revised == working:
-                break
-            working = revised
-    errors.append(
-        "A compliant one-page resume could not be produced within the configured "
-        "revision limit. Only newly edited content was shortened; layout, margins, "
-        "font size, spacing, and unrelated source were preserved."
+    return compile_one_page(
+        source,
+        tex_path,
+        pdf_path,
+        tracer=tracer,
+        trace_metadata=trace_metadata,
+        revision=revision,
+        latex_runner=_run_pdflatex,
     )
-    return page_count, errors, working
 
 
 def _run_pdflatex(tex_path: Path) -> list[str]:

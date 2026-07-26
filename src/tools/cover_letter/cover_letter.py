@@ -8,7 +8,7 @@ from pathlib import Path
 
 from pydantic import Field
 
-from app.configuration import get_config
+from src.config import get_config
 from src.domain import (
     EvidenceItem,
     Job,
@@ -22,6 +22,7 @@ from src.utils.job_evidence import (
     job_skill_evidence_id,
 )
 from src.utils.latex import escape_latex, pdf_page_count, pdflatex_command, run_pdflatex
+from src.utils.paths import job_output_dir
 from src.utils.skill_matching import (
     canonicalize,
 )
@@ -36,6 +37,7 @@ class GenerateCoverLetterInput(StrictBaseModel):
     approved_resume_path: str
     candidate_evidence: list[EvidenceItem] = Field(default_factory=list)
     job_evidence: list[EvidenceItem] = Field(default_factory=list)
+    run_id: str | None = None
 
 
 class GenerateCoverLetterOutput(StrictBaseModel):
@@ -139,7 +141,7 @@ def run_cover_letter_tool(
         )
 
     config = get_config()
-    job_dir = config.output_dir / value.job.job_id
+    job_dir = job_output_dir(value.job.job_id, run_id=value.run_id, config=config)
     job_dir.mkdir(parents=True, exist_ok=True)
     tex_path = job_dir / "cover_letter.tex"
     pdf_path = job_dir / "cover_letter.pdf"

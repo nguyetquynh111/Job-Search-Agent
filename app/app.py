@@ -2,6 +2,18 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+if __package__ in {None, ""}:
+    project_root = str(Path(__file__).resolve().parents[1])
+    if sys.path[0] != project_root:
+        try:
+            sys.path.remove(project_root)
+        except ValueError:
+            pass
+        sys.path.insert(0, project_root)
+
 import streamlit as st
 from dotenv import load_dotenv
 

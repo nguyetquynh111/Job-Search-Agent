@@ -1,8 +1,4 @@
-"""Compatibility wrapper for runtime configuration.
-
-Core code imports :mod:`src.config`; this module remains for the Streamlit app
-and older tests that patch the application configuration import path.
-"""
+"""Runtime configuration shared by the app and core workflow."""
 
 from src.config.settings import (
     AppConfig,
@@ -15,7 +11,6 @@ from src.config.settings import (
     MAX_REVISION_ROUNDS,
     TOP_JOB_COUNT,
     get_config,
-    shutil,
     validate_runtime_requirements,
 )
 
@@ -30,6 +25,5 @@ __all__ = [
     "MAX_REVISION_ROUNDS",
     "TOP_JOB_COUNT",
     "get_config",
-    "shutil",
     "validate_runtime_requirements",
 ]

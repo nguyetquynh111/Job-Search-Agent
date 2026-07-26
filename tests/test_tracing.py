@@ -38,14 +38,14 @@ def test_tests_are_grouped_into_a_short_domain_tree() -> None:
     assert directories == {"fixtures"}
 
 
-def test_tools_contains_only_the_five_callable_boundaries() -> None:
+def test_tools_contains_required_packages_and_registry_boundary() -> None:
     source_files = {
         path.name
         for path in Path("src/tools").glob("*.py")
         if path.name != "__init__.py"
     }
 
-    assert source_files == set()
+    assert source_files == {"registry.py"}
 
     tool_directories = {
         path.name
@@ -66,7 +66,10 @@ def test_legacy_responsibility_locations_are_absent() -> None:
     assert not Path("src/memory/models.py").exists()
     assert not Path("src/shared").exists()
     assert not Path("src/data_loader.py").exists()
-    assert not Path("src/agent").exists()
+    assert Path("src/agent").is_dir()
+    assert Path("src/agent/controller.py").is_file()
+    assert Path("src/agent/graph.py").is_file()
+    assert Path("src/agent/state.py").is_file()
     assert Path("app/app.py").is_file()
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from app.configuration import get_config
+from src.config import get_config
 from src.tracing.langfuse import TraceManager
 from src.tools.fit_analysis.contracts import AnalyzeFitInput, FitAnalysisOutput
 from src.tools.fit_analysis.evidence_index import (
@@ -33,10 +33,11 @@ from src.tools.fit_analysis.prepass import (
     build_fallback_output,
     build_project_section,
     build_skill_section,
+    expand_canonical_skills,
     prepass_summary,
     run_prepass,
+    seniority_verdict,
 )
-from src.tools.fit_analysis.prepass import _expand_canonicals, _seniority_verdict
 from src.tools.fit_analysis.render import (
     build_source_labels,
     render_fit_analysis,
@@ -65,6 +66,7 @@ from src.tools.fit_analysis.swap import (
     UBIQUITOUS_SKILLS,
     build_project_swap,
     choose_swap,
+    match_terms,
     normalize_name,
     rank_projects,
     resolve_portfolio_project,
@@ -72,7 +74,6 @@ from src.tools.fit_analysis.swap import (
     score_project,
     validate_proposed_swap,
 )
-from src.tools.fit_analysis.swap import _matches
 import src.tools.fit_analysis.validation as validation
 from src.tools.fit_analysis.validation import merge_llm_proposal, post_validate
 from src.utils.job_evidence import build_job_evidence
@@ -110,7 +111,7 @@ def analyze_fit(
         active_complete = _traced_completion(active, inp, complete_fn)
         index = build_evidence_index(
             inp.evidence_items,
-            vocabulary=set(_expand_canonicals(inp.job.required_skills)),
+            vocabulary=set(expand_canonical_skills(inp.job.required_skills)),
         )
         prepass = run_prepass(inp, index)
         output, path_label, meta = llm.analyze(
@@ -272,6 +273,7 @@ __all__ = [
     "analyze",
     "analyze_fit",
     "build_evidence_index",
+    "expand_canonical_skills",
     "build_fallback_output",
     "build_project_section",
     "build_project_swap",
@@ -285,6 +287,7 @@ __all__ = [
     "enrich_seniority",
     "enrich_swap",
     "marker",
+    "match_terms",
     "merge_llm_proposal",
     "model_configured",
     "narrative_confidence",
@@ -301,12 +304,10 @@ __all__ = [
     "score_for",
     "score_project",
     "seniority_prose_ok",
+    "seniority_verdict",
     "skill_confidence",
     "source_kind",
     "tag",
     "validate_proposed_swap",
     "write_fit_analysis",
-    "_expand_canonicals",
-    "_matches",
-    "_seniority_verdict",
 ]

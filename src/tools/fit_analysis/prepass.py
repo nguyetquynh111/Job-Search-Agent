@@ -123,6 +123,12 @@ def _expand_canonicals(skills: list[str]) -> list[str]:
     return expanded
 
 
+def expand_canonical_skills(skills: list[str]) -> list[str]:
+    """Return canonical required-skill tokens, including split-part tokens."""
+
+    return _expand_canonicals(skills)
+
+
 def _resolve_required(
     original: str, index: EvidenceIndex, resume_skill_set: set[str]
 ) -> SkillClaim:
@@ -334,6 +340,12 @@ def _seniority_verdict(candidate_years, required_min) -> str:
     if candidate_years >= 0.6 * required_min:
         return rules.PARTIAL
     return rules.MISMATCH
+
+
+def seniority_verdict(candidate_years, required_min) -> str:
+    """Return the public seniority verdict from candidate vs required years."""
+
+    return _seniority_verdict(candidate_years, required_min)
 
 
 def _seniority(inp: AnalyzeFitInput) -> list[EvidenceClaim]:

@@ -12,12 +12,13 @@ import json
 import logging
 from pathlib import Path
 
-from app.configuration import AppConfig, get_config
+from src.config import AppConfig, get_config
 from src.domain import EvidenceClaim
-from src.tools.fit_analysis.contracts import AnalyzeFitInput, FitAnalysisOutput
 from src.domain import Job
+from src.tools.fit_analysis.contracts import AnalyzeFitInput, FitAnalysisOutput
 import src.tools.fit_analysis.rules as rules
 from src.utils.job_evidence import build_job_evidence
+from src.utils.paths import job_output_dir
 
 logger = logging.getLogger(__name__)
 
@@ -217,17 +218,18 @@ def write_fit_analysis(
     job: Job | None = None,
     config: AppConfig | None = None,
     *,
+    run_id: str | None = None,
     source_labels: dict[str, str] | None = None,
     missing_marker: str = "❌",
 ) -> tuple[Path, Path]:
-    """Write ``fit_analysis.md`` and ``fit_analysis.json`` to ``<output_dir>/<job_id>/``.
+    """Write ``fit_analysis.md`` and ``fit_analysis.json`` to the job output folder.
 
     The per-job directory is shared with other tools: it is created if absent and
     never cleared. Only these two files are written.
     """
 
     config = config or get_config()
-    job_dir = config.output_dir / output.job_id
+    job_dir = job_output_dir(output.job_id, run_id=run_id, config=config)
     job_dir.mkdir(parents=True, exist_ok=True)
 
     md_path = job_dir / "fit_analysis.md"

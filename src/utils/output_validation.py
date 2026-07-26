@@ -9,28 +9,38 @@ from typing import Any
 
 from pydantic import Field
 
-from app.configuration import AppConfig, get_config
+from src.config import AppConfig, get_config
 from src.domain import StrictBaseModel
 from src.utils.latex import pdf_page_count
+from src.utils.paths import run_output_dir
 
 
 class OutputManifest(StrictBaseModel):
     """Validated canonical artifacts produced for the selected Top 3."""
 
+    run_id: str | None = None
+    output_root: str
     job_ids: list[str] = Field(min_length=3, max_length=3)
     job_directories: list[str] = Field(min_length=3, max_length=3)
     mandatory_files_per_job: list[str]
     resume_count: int = 3
     cover_letter_count: int = 3
     pdf_count: int = 9
+    trace_id: str | None = None
+    trace_url: str | None = None
 
 
 MANDATORY_JOB_FILES = (
     "job_details.json",
     "resume_before.pdf",
+    "resume_after.tex",
     "resume_after.pdf",
+    "cover_letter.tex",
     "cover_letter.pdf",
     "fit_analysis.md",
+    "change_log.json",
+    "human_review_decision.json",
+    "revision_history.json",
 )
 TEMPORARY_LATEX_SUFFIXES = (
     ".aux",
@@ -55,6 +65,9 @@ def write_and_validate_outputs(
     """Write canonical Top-3 artifacts and validate the complete output contract."""
 
     active = config or get_config()
+    run_id = state.get("run_id")
+    root_dir = run_output_dir(run_id, config=active) if run_id else active.output_dir
+    root_dir.mkdir(parents=True, exist_ok=True)
     top_job_ids = list(state.get("top_3_job_ids", []))
     if len(top_job_ids) != 3 or len(set(top_job_ids)) != 3:
         raise OutputValidationError(
@@ -79,7 +92,7 @@ def write_and_validate_outputs(
         if job_id not in letters:
             raise OutputValidationError(f"Missing cover-letter result for {job_id}.")
 
-        job_dir = active.output_dir / job_id
+        job_dir = root_dir / job_id
         job_dir.mkdir(parents=True, exist_ok=True)
         produced_directories.append(str(job_dir))
         (job_dir / "job_details.json").write_text(
@@ -92,9 +105,19 @@ def write_and_validate_outputs(
             label=f"final resume for {job_id}",
         )
         _copy_artifact(
+            tailoring[job_id].get("output_tex_path"),
+            job_dir / "resume_after.tex",
+            label=f"final resume source for {job_id}",
+        )
+        _copy_artifact(
             letters[job_id].get("output_pdf_path"),
             job_dir / "cover_letter.pdf",
             label=f"cover letter for {job_id}",
+        )
+        _copy_artifact(
+            letters[job_id].get("output_tex_path"),
+            job_dir / "cover_letter.tex",
+            label=f"cover letter source for {job_id}",
         )
 
         fit_path = Path(
@@ -106,6 +129,14 @@ def write_and_validate_outputs(
                 job_dir / "fit_analysis.md",
                 label=f"fit analysis for {job_id}",
             )
+        fit_json_path = artifacts.get(job_id, {}).get("json_path")
+        if fit_json_path:
+            _copy_artifact(
+                fit_json_path,
+                job_dir / "fit_analysis.json",
+                label=f"fit analysis JSON for {job_id}",
+            )
+        _write_job_metadata_files(state, job_id, job_dir)
 
         _remove_temporary_latex_files(job_dir)
         _validate_job_directory(job_dir)
@@ -114,11 +145,52 @@ def write_and_validate_outputs(
         raise OutputValidationError(
             f"Expected three selected job directories, produced {len(produced_directories)}."
         )
-    return OutputManifest(
+    manifest = OutputManifest(
+        run_id=run_id,
+        output_root=str(root_dir),
         job_ids=top_job_ids,
         job_directories=produced_directories,
         mandatory_files_per_job=list(MANDATORY_JOB_FILES),
+        trace_id=state.get("trace_id"),
+        trace_url=state.get("trace_url"),
     ).model_dump()
+    _write_run_files(state, root_dir, manifest)
+    return manifest
+
+
+def _write_run_files(
+    state: dict[str, Any],
+    root_dir: Path,
+    manifest: dict[str, Any],
+) -> None:
+    (root_dir / "run_manifest.json").write_text(
+        json.dumps(manifest, indent=2, ensure_ascii=False, default=str),
+        encoding="utf-8",
+    )
+    trace_events = state.get("trace_events", [])
+    (root_dir / "trace_events.json").write_text(
+        json.dumps(trace_events, indent=2, ensure_ascii=False, default=str),
+        encoding="utf-8",
+    )
+    for filename, key in (
+        ("filtered_jobs.json", "filtered_jobs"),
+        ("rejected_jobs.json", "rejected_jobs"),
+        ("ranked_jobs.json", "ranked_jobs"),
+        ("review_history.json", "review_history"),
+    ):
+        (root_dir / filename).write_text(
+            json.dumps(state.get(key, []), indent=2, ensure_ascii=False, default=str),
+            encoding="utf-8",
+        )
+    memory_file = state.get("memory_file")
+    if memory_file:
+        memory_path = Path(memory_file)
+        if memory_path.is_file():
+            _copy_artifact(str(memory_path), root_dir / "memory.json", label="memory")
+        elif not (root_dir / "memory.json").exists():
+            (root_dir / "memory.json").write_text("[]", encoding="utf-8")
+    elif not (root_dir / "memory.json").exists():
+        (root_dir / "memory.json").write_text("[]", encoding="utf-8")
 
 
 def _copy_artifact(source: str | None, destination: Path, *, label: str) -> None:
@@ -141,6 +213,37 @@ def _remove_temporary_latex_files(job_dir: Path) -> None:
             path.name.endswith(suffix) for suffix in TEMPORARY_LATEX_SUFFIXES
         ):
             path.unlink()
+
+
+def _write_job_metadata_files(
+    state: dict[str, Any], job_id: str, job_dir: Path
+) -> None:
+    tailoring = state.get("tailoring_results", {}).get(job_id, {})
+    review_decision = state.get("review_decisions", {}).get(job_id, {})
+    review_history = [
+        entry
+        for entry in state.get("review_history", [])
+        if job_id in entry.get("decisions", {})
+        or job_id in entry.get("actions_taken", {})
+        or job_id in entry.get("rejected_job_ids", [])
+    ]
+    (job_dir / "change_log.json").write_text(
+        json.dumps(
+            tailoring.get("change_log", []),
+            indent=2,
+            ensure_ascii=False,
+            default=str,
+        ),
+        encoding="utf-8",
+    )
+    (job_dir / "human_review_decision.json").write_text(
+        json.dumps(review_decision, indent=2, ensure_ascii=False, default=str),
+        encoding="utf-8",
+    )
+    (job_dir / "revision_history.json").write_text(
+        json.dumps(review_history, indent=2, ensure_ascii=False, default=str),
+        encoding="utf-8",
+    )
 
 
 def _validate_job_directory(job_dir: Path) -> None:

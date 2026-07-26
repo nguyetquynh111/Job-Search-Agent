@@ -643,6 +643,46 @@ def test_memory_persists_to_json(tmp_path: Path) -> None:
     assert loaded[0].canonical_value == "GraphQL"
 
 
+def test_memory_conflict_resolution_keeps_audit_and_active_latest(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "memory.json"
+    store = JSONMemoryStore(path)
+    old = MemoryFact(
+        fact_id="mem-old",
+        fact_type="experience",
+        canonical_value="2 years of experience in data engineering",
+        provenance=MemoryProvenance(
+            source="human_review",
+            review_round=1,
+            original_statement="I have 2 years of experience in data engineering.",
+            related_job_id="J001",
+        ),
+    )
+    new = MemoryFact(
+        fact_id="mem-new",
+        fact_type="experience",
+        canonical_value="5 years of experience in data engineering",
+        provenance=MemoryProvenance(
+            source="human_review",
+            review_round=1,
+            original_statement="I have 5 years of experience in data engineering.",
+            related_job_id="J002",
+        ),
+    )
+
+    store.append_many([old], run_id="run-old")
+    loaded = store.append_many([new], run_id="run-new")
+
+    assert [fact.active for fact in loaded] == [False, True]
+    conflict = loaded[1].conflicts[0]
+    assert conflict.old_fact["canonical_value"] == old.canonical_value
+    assert conflict.new_fact["canonical_value"] == new.canonical_value
+    assert conflict.affected_job_id == "J002"
+    assert conflict.affected_run_id == "run-new"
+    assert conflict.active_value == new.canonical_value
+
+
 def test_memory_extractor_ignores_editing_preferences() -> None:
     """Extractor stores candidate facts, not editing preferences."""
 

@@ -16,7 +16,7 @@ from typing import Any
 from pydantic import ValidationError
 from pydantic.types import SecretStr
 
-from app.configuration import get_config
+from src.config import get_config
 from src.domain import EvidenceClaim, ProjectSwap
 from src.tracing.langfuse import TraceManager
 from src.tools.fit_analysis.contracts import AnalyzeFitInput, FitAnalysisOutput

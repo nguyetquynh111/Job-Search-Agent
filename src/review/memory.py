@@ -27,6 +27,20 @@ class MemoryProvenance(StrictBaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class MemoryConflict(StrictBaseModel):
+    """Recorded conflict and deterministic resolution between memory facts."""
+
+    conflict_id: str
+    old_fact: dict[str, Any]
+    new_fact: dict[str, Any]
+    source: str
+    timestamp: str
+    affected_job_id: str | None = None
+    affected_run_id: str | None = None
+    resolution: str
+    active_value: str
+
+
 class MemoryFact(StrictBaseModel):
     """Candidate memory fact persisted to JSON."""
 
@@ -38,6 +52,7 @@ class MemoryFact(StrictBaseModel):
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
     active: bool = True
+    conflicts: list[MemoryConflict] = Field(default_factory=list)
 
     @property
     def deduplication_key(self) -> tuple[str, str]:
@@ -96,7 +111,12 @@ class JSONMemoryStore:
                 f"Memory file contains invalid entries: {self.path}"
             ) from exc
 
-    def append_many(self, facts: list[MemoryFact]) -> list[MemoryFact]:
+    def append_many(
+        self,
+        facts: list[MemoryFact],
+        *,
+        run_id: str | None = None,
+    ) -> list[MemoryFact]:
         """Append new facts and persist the full memory file."""
 
         if not facts:
@@ -109,6 +129,7 @@ class JSONMemoryStore:
             if key in known:
                 logger.info("Skipping duplicate memory fact: %s", fact.canonical_value)
                 continue
+            current, fact = _resolve_conflicts(current, fact, run_id=run_id)
             known.add(key)
             deduped.append(fact)
         updated = [*current, *deduped]
@@ -307,6 +328,73 @@ def _looks_like_skill(value: str) -> bool:
 def _canonicalize_skill(value: str) -> str:
     known = _KNOWN_TECHNOLOGIES.get(value.casefold())
     return known or value.strip()
+
+
+def _resolve_conflicts(
+    current: list[MemoryFact],
+    new_fact: MemoryFact,
+    *,
+    run_id: str | None,
+) -> tuple[list[MemoryFact], MemoryFact]:
+    conflict_group = _conflict_group(new_fact)
+    if conflict_group is None:
+        return current, new_fact
+    resolved = list(current)
+    for index, old_fact in enumerate(current):
+        if not old_fact.active:
+            continue
+        if _conflict_group(old_fact) != conflict_group:
+            continue
+        if old_fact.canonical_value.casefold() == new_fact.canonical_value.casefold():
+            continue
+        timestamp = datetime.now(timezone.utc).isoformat()
+        conflict = MemoryConflict(
+            conflict_id=f"conflict-{uuid4().hex[:12]}",
+            old_fact=_fact_snapshot(old_fact),
+            new_fact=_fact_snapshot(new_fact),
+            source=new_fact.provenance.source,
+            timestamp=timestamp,
+            affected_job_id=new_fact.provenance.related_job_id,
+            affected_run_id=run_id,
+            resolution=(
+                "latest_validated_human_review_fact_wins; previous fact retained "
+                "inactive for audit"
+            ),
+            active_value=new_fact.canonical_value,
+        )
+        resolved[index] = old_fact.model_copy(
+            update={
+                "active": False,
+                "conflicts": [*old_fact.conflicts, conflict],
+            }
+        )
+        new_fact = new_fact.model_copy(
+            update={"active": True, "conflicts": [*new_fact.conflicts, conflict]}
+        )
+    return resolved, new_fact
+
+
+def _conflict_group(fact: MemoryFact) -> str | None:
+    fact_type = fact.fact_type.casefold()
+    value = fact.canonical_value.casefold()
+    if fact_type == "experience":
+        return "experience"
+    if fact_type == "candidate_fact" and any(
+        token in value for token in ("authorized to work", "visa", "sponsorship")
+    ):
+        return "work_authorization"
+    return None
+
+
+def _fact_snapshot(fact: MemoryFact) -> dict[str, Any]:
+    return {
+        "fact_id": fact.fact_id,
+        "fact_type": fact.fact_type,
+        "canonical_value": fact.canonical_value,
+        "source": fact.provenance.source,
+        "created_at": fact.created_at,
+        "related_job_id": fact.provenance.related_job_id,
+    }
 
 
 def validate_memory_facts(

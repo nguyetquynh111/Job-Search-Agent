@@ -21,13 +21,14 @@ from src.tools.fit_analysis import fit_analysis as verdict
 from src.tools.fit_analysis import llm as llm_client
 from src.tools.fit_analysis.fit_analysis import AnalyzeFitInput
 from src.tools.fit_analysis.fit_analysis import FitAnalysisOutput
-from src.tools.fit_analysis.fit_analysis import _expand_canonicals
-from src.tools.fit_analysis.fit_analysis import _matches, rank_projects
 from src.tools.fit_analysis.fit_analysis import build_evidence_index
 from src.tools.fit_analysis.fit_analysis import build_source_labels, render_fit_analysis
+from src.tools.fit_analysis.fit_analysis import expand_canonical_skills
+from src.tools.fit_analysis.fit_analysis import match_terms, rank_projects
 from src.tools.fit_analysis.fit_analysis import post_validate
 from src.tools.fit_analysis.fit_analysis import run_prepass
 from src.tools.fit_analysis.fit_analysis import sanitize_text
+from src.tools.fit_analysis.fit_analysis import seniority_verdict
 import json
 import pytest
 
@@ -1145,13 +1146,12 @@ def test_memory_only_evidenced_skill_is_evidenced_missing_not_gap() -> None:
 
 def test_seniority_verdict_reflects_year_shortfall() -> None:
     from src.tools.fit_analysis import fit_analysis as verdict
-    from src.tools.fit_analysis.fit_analysis import _seniority_verdict
 
-    assert _seniority_verdict(6, 5) == verdict.MATCH
-    assert _seniority_verdict(4, 5) == verdict.PARTIAL  # Small shortfall.
-    assert _seniority_verdict(1, 5) == verdict.MISMATCH  # Large shortfall.
-    assert _seniority_verdict(None, 5) == verdict.PARTIAL  # Candidate years unknown.
-    assert _seniority_verdict(4, None) == verdict.MATCH  # No stated requirement.
+    assert seniority_verdict(6, 5) == verdict.MATCH
+    assert seniority_verdict(4, 5) == verdict.PARTIAL  # Small shortfall.
+    assert seniority_verdict(1, 5) == verdict.MISMATCH  # Large shortfall.
+    assert seniority_verdict(None, 5) == verdict.PARTIAL  # Candidate years unknown.
+    assert seniority_verdict(4, None) == verdict.MATCH  # No stated requirement.
 
 
 def test_none_years_required_does_not_crash_and_is_not_inferred() -> None:
@@ -1195,7 +1195,7 @@ def _fit_ranking_ranking(job_id: str):
     portfolio = load_portfolio(str(_PORTFOLIO))
     job_text = sanitize_text(f"{job.title}. {job.description} {job.company_details}")
     return job, rank_projects(
-        portfolio.projects, job, _expand_canonicals(job.required_skills), job_text
+        portfolio.projects, job, expand_canonical_skills(job.required_skills), job_text
     )
 
 
@@ -1220,15 +1220,17 @@ def test_j030_prefers_the_recommendation_project_over_medical_imaging() -> None:
 
 def test_partial_phrase_overlap_needs_a_distinctive_word() -> None:
     # One distinctive word can carry a phrase.
-    assert _matches(
+    assert match_terms(
         ["Recommendation and Ranking"], "we build recommendation systems"
     ) == ["Recommendation and Ranking"]
     # Filler words cannot.
-    assert _matches(["Deep Learning"], "deep learning models") == []
-    assert _matches(["Computer Vision"], "a computer in the office") == []
-    assert _matches(["Computer Vision"], "vision transformers") == ["Computer Vision"]
+    assert match_terms(["Deep Learning"], "deep learning models") == []
+    assert match_terms(["Computer Vision"], "a computer in the office") == []
+    assert match_terms(["Computer Vision"], "vision transformers") == [
+        "Computer Vision"
+    ]
     # Singular and plural forms match.
-    assert _matches(["Decentralized Data Systems"], "a decentralized system") == [
+    assert match_terms(["Decentralized Data Systems"], "a decentralized system") == [
         "Decentralized Data Systems"
     ]
 

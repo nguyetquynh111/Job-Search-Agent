@@ -145,6 +145,12 @@ def _matches(tokens: list[str], text: str) -> list[str]:
     return found
 
 
+def match_terms(tokens: list[str], text: str) -> list[str]:
+    """Return terms whose content words sufficiently overlap text."""
+
+    return _matches(tokens, text)
+
+
 @dataclass
 class ProjectScore:
     """A portfolio project scored for relevance to one job."""

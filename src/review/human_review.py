@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from pydantic import Field, model_validator
 
-from app.configuration import MAX_REVISION_ROUNDS
+from src.config import MAX_REVISION_ROUNDS
 from src.domain import StrictBaseModel
 
 
