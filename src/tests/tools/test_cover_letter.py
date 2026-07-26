@@ -75,3 +75,19 @@ def test_cover_letter_uses_evidence_and_reports_real_paths(
         "resume-experience-001",
     }
     assert not result.errors
+
+
+def test_negated_skill_evidence_is_not_used_in_cover_letter() -> None:
+    negated = EvidenceItem(
+        evidence_id="resume-negated-go",
+        source="resume",
+        text="I have never used Go.",
+        tags=["experience", "Go"],
+    )
+
+    skills, evidence_ids = cover._match_required_skills(
+        ["Go"], {negated.evidence_id: negated}
+    )
+
+    assert skills == []
+    assert evidence_ids == set()

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from pypdf import PdfWriter
@@ -41,14 +42,14 @@ def test_graph_wiring_across_review_memory_revision_and_letters(
         trace_metadata=None,
     ):
         with tracer.span(
-            "resume_latex_compilation",
+            "resume_tailoring.compile_pdf",
             trace_metadata,
             input={"tex_file": tex_path.name},
         ):
             tex_path.write_text(text, encoding="utf-8")
             write_pdf(pdf_path)
         with tracer.span(
-            "resume_one_page_verification",
+            "resume_tailoring.validate_page_count",
             trace_metadata,
             input={"pdf_file": pdf_path.name},
         ):
@@ -65,7 +66,7 @@ def test_graph_wiring_across_review_memory_revision_and_letters(
         trace_metadata=None,
     ):
         with tracer.span(
-            "cover_letter_latex_compilation",
+            "cover_letter.compile_pdf",
             trace_metadata,
             input={"tex_file": tex_path.name},
         ):
@@ -74,7 +75,7 @@ def test_graph_wiring_across_review_memory_revision_and_letters(
             )
             write_pdf(pdf_path)
         with tracer.span(
-            "cover_letter_one_page_verification",
+            "cover_letter.validate_page_count",
             trace_metadata,
             input={"pdf_file": pdf_path.name},
         ):
@@ -194,11 +195,80 @@ def test_graph_wiring_across_review_memory_revision_and_letters(
     )
     assert all("payload" in event.input for event in revised_tool_events)
     assert all("result" in event.output for event in revised_tool_events)
+    assert all("configuration" in event.metadata for event in revised_tool_events)
     revised_ids = {event.observation_id for event in revised_tool_events}
     assert any(
-        event.name == "resume_latex_compilation"
+        event.name == "resume_tailoring.compile_pdf"
         and event.parent_observation_id in revised_ids
         for event in tracer.events
     )
+    assert len(final["fit_analysis_artifacts"]) == 3
+    assert all(
+        Path(path).is_file()
+        for paths in final["fit_analysis_artifacts"].values()
+        for path in paths.values()
+    )
+    ambiguous_tool_names = {
+        "filter_jobs",
+        "score_jobs",
+        "analyze_fit",
+        "tailor_resume",
+        "generate_cover_letter",
+    }
+    names = [event.name for event in tracer.events]
+    assert not any(
+        names.count(name) > 1 and not name.endswith(("_job_1", "_job_2", "_job_3"))
+        for name in ambiguous_tool_names
+    )
+    decision_event = next(
+        event
+        for event in tracer.events
+        if event.name == "agent_controller"
+        and event.metadata.get("selected_tool") == "analyze_fit"
+    )
+    assert decision_event.metadata["available_tools"]
+    assert decision_event.metadata["target_job_id"] in final["top_3_job_ids"]
+    assert decision_event.metadata["decision_reason"]
+    assert "current_workflow_state" in decision_event.input
+    fit_artifact_events = [
+        event
+        for event in tracer.events
+        if event.name == "fit_analysis.write_artifacts"
+    ]
+    assert len(fit_artifact_events) >= 3
+    assert all(
+        event.output["markdown_exists"] and event.output["json_exists"]
+        for event in fit_artifact_events
+    )
+    refreshed_fit_tools = [
+        event
+        for event in tracer.events
+        if event.name.startswith("fit_analysis_job_")
+        and event.parent_observation_id == revision_event.observation_id
+    ]
+    assert refreshed_fit_tools
+    refreshed_fit_ids = {event.observation_id for event in refreshed_fit_tools}
+    assert any(
+        event.parent_observation_id in refreshed_fit_ids
+        for event in fit_artifact_events
+    )
+    refreshed_jobs = {event.metadata["job_id"] for event in refreshed_fit_tools}
+    for job_id in refreshed_jobs:
+        payload = json.loads(
+            Path(
+                final["fit_analysis_artifacts"][job_id]["json_path"]
+            ).read_text(encoding="utf-8")
+        )
+        evidence_ids = {
+            evidence_id
+            for field in (
+                "aligned_skills",
+                "evidenced_missing_skills",
+                "genuine_gaps",
+            )
+            for claim in payload[field]
+            for evidence_id in claim["evidence_ids"]
+        }
+        assert any(evidence_id.startswith("mem-") for evidence_id in evidence_ids)
     assert {event.trace_id for event in tracer.events} == {"trace-run-e2e"}
     assert [event.name for event in tracer.events].count("human_review_pause") == 1

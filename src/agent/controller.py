@@ -333,7 +333,11 @@ class SingleAgentController:
         )
         if not next_job_id:
             raise AgentControllerError("All selected jobs already have fit analyses.")
-        if next_job_id in state.get("fit_analyses", {}):
+        refresh_ids = set(state.get("fit_analysis_refresh_job_ids", []))
+        if (
+            next_job_id in state.get("fit_analyses", {})
+            and next_job_id not in refresh_ids
+        ):
             raise AgentControllerError(f"Fit analysis already exists for {next_job_id}.")
         if next_job_id not in state.get("top_3_job_ids", []):
             raise AgentControllerError(f"{next_job_id} is not a selected Top-3 job.")
@@ -494,9 +498,19 @@ class SingleAgentController:
             assert_scoring_complete(state.get("ranked_jobs", []), top_3)
             pending = list(state.get("pending_revision_job_ids", []))
             if pending:
-                actions.append(
-                    {"tool_name": "tailor_resume", "target_job_ids": pending}
-                )
+                refresh = [
+                    job_id
+                    for job_id in state.get("fit_analysis_refresh_job_ids", [])
+                    if job_id in pending
+                ]
+                if refresh:
+                    actions.append(
+                        {"tool_name": "analyze_fit", "target_job_ids": refresh}
+                    )
+                else:
+                    actions.append(
+                        {"tool_name": "tailor_resume", "target_job_ids": pending}
+                    )
             else:
                 missing_fit = [
                     job_id
@@ -560,6 +574,9 @@ class SingleAgentController:
             "fit_analysis_completed": [
                 job_id for job_id in top_3 if job_id in state.get("fit_analyses", {})
             ],
+            "fit_analysis_refresh_job_ids": state.get(
+                "fit_analysis_refresh_job_ids", []
+            ),
             "tailoring_completed": [
                 job_id
                 for job_id in top_3
@@ -599,6 +616,10 @@ class SingleAgentController:
             f"analyze fit for {job_id}"
             for job_id in top_3
             if job_id not in state.get("fit_analyses", {})
+        )
+        unresolved.extend(
+            f"refresh fit analysis for {job_id} after memory update"
+            for job_id in state.get("fit_analysis_refresh_job_ids", [])
         )
         unresolved.extend(
             f"tailor resume for {job_id}"

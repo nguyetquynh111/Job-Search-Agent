@@ -67,8 +67,12 @@ Never commit `.env`.
 Check the complete production configuration:
 
 ```bash
-python -c "from src.config import validate_runtime_requirements; validate_runtime_requirements(); print('Runtime preflight passed')"
+python scripts/preflight.py --require-langfuse
 ```
+
+This checks Python 3.12 and imported dependencies, `pdflatex`, every required
+LaTeX package, a real TeX compilation, DeepInfra credentials, complete Langfuse
+credentials, writable output storage, and all four checked-in input fixtures.
 
 ## Verify the Checkout
 
@@ -83,8 +87,8 @@ python -m pip check
 python -m pytest -q
 ```
 
-On a machine without `pdflatex`, the expected result is `164 passed, 1 skipped`.
-With `pdflatex` and the required LaTeX packages installed, all 165 tests run.
+On a machine without `pdflatex`, the expected result is `180 passed, 1 skipped`.
+With `pdflatex` and the required LaTeX packages installed, all 181 tests run.
 
 Run the real artifact smoke test directly with:
 
@@ -92,11 +96,24 @@ Run the real artifact smoke test directly with:
 python -m pytest -q src/tests/integration/test_real_pdflatex_end_to_end.py
 ```
 
-The smoke test intentionally uses the explicit offline controller policy so it
+The test smoke intentionally uses the explicit offline controller policy so it
 is deterministic in CI; controller-specific tests separately exercise LLM-owned
 selection among multiple valid actions and rejection of invalid actions. A
-submission demonstration of the documented application command must keep
-`ALLOW_OFFLINE_CONTROLLER=false` and provide the DeepInfra variables below.
+submission demonstration must use the configured LLM controller.
+
+Run the mandatory connected production demonstration with:
+
+```bash
+python scripts/preflight.py --require-langfuse
+python scripts/run_production_smoke.py | tee outputs/production-smoke.log
+```
+
+The production-smoke output directory must be empty at the start. The command
+uses the real DeepInfra controller, real tool implementations, SQLite
+checkpointing, persistent memory, one review interrupt with one rejected resume,
+real `pdflatex`, page inspection, all six final PDFs, and one connected Langfuse
+trace. It writes `production_run.json` and `trace_export.json` alongside the
+artifacts and fails instead of skipping any required production dependency.
 
 ## Run the Application
 
@@ -293,10 +310,57 @@ With valid Langfuse credentials, the run creates one root trace named
 decisions, LLM generations, tool calls, the human-review pause, memory writes,
 revisions, LaTeX compilation, one-page checks, and completion.
 
+The observation hierarchy uses one outer span for each model-visible tool and
+explicitly named substeps:
+
+```text
+job_search_agent_run
+  agent_controller
+    agent_controller_llm
+  fit_analysis_job_N
+    fit_analysis.analysis_pipeline
+      fit_analysis_llm
+    fit_analysis.write_artifacts
+  tailor_resume_job_N
+    resume_tailoring.edit_content
+    resume_tailoring.compile_pdf
+    resume_tailoring.validate_page_count
+  human_review
+    human_review_pause
+    human_review_feedback
+    memory_write
+    review_revision
+      tailor_resume_job_N
+  generate_cover_letter_job_N
+    cover_letter.generate_content
+    cover_letter.compile_pdf
+    cover_letter.validate_page_count
+```
+
+Model name, parameters, token usage, available actions, selected tool and job,
+decision reason, workflow state, evidence IDs, compilation command/result, page
+count, review decisions, and memory provenance are retained locally as well as
+sent in the sanitized remote payload. Checkpointed trace and parent IDs are
+reused after the review process restarts.
+
 If Langfuse is unavailable, the workflow continues with local no-op tracing. The
 Results page shows the connection state and links to the remote trace when one is
 available. Remote traces are public, and trace payloads are sanitized before
 export.
+
+## Packaging Verification
+
+Generated artifacts, `.env`, caches, temporary LaTeX files, local SQLite files,
+and memory files remain ignored. After committing intended source and test
+changes, verify that no implementation depends on an untracked file:
+
+```bash
+scripts/verify_clean_checkout.sh
+```
+
+The command creates a detached clean worktree, checks required files, installs
+the pinned environment, verifies imports and dependency consistency, and runs
+the complete test suite.
 
 ## Repository Layout
 

@@ -208,3 +208,97 @@ def test_harmless_alias_is_accepted_but_unrelated_keyword_is_not() -> None:
     ]
     assert all(not claim.claim.startswith("Go:") for claim in result.genuine_gaps)
     assert any("unsupported keyword/skill 'Go'" in item for item in failures)
+
+
+def test_semantically_unrelated_known_ids_are_removed_from_skill_claim() -> None:
+    inp = _base_input(
+        required_skills=["Python"],
+        evidence=[
+            make_evidence(
+                "resume-python",
+                "resume",
+                "Built production services in Python.",
+                tags=["experience", "Python"],
+            ),
+            make_evidence(
+                "resume-unrelated",
+                "resume",
+                "Led stakeholder planning and roadmap reviews.",
+                tags=["experience", "leadership"],
+            ),
+        ],
+    )
+    output = FitAnalysisOutput(
+        job_id="J1",
+        aligned_skills=[
+            EvidenceClaim(
+                claim="Python: aligned",
+                evidence_ids=["resume-python", "resume-unrelated"],
+            )
+        ],
+    )
+
+    result, repairs = post_validate(output, inp)
+
+    assert result.aligned_skills[0].evidence_ids == [
+        "job-J1-skill-001",
+        "resume-python",
+    ]
+    assert any("resume-unrelated" in repair for repair in repairs)
+
+
+def test_negated_skill_evidence_cannot_support_experience() -> None:
+    inp = _base_input(
+        required_skills=["Go"],
+        evidence=[
+            make_evidence(
+                "resume-negated-go",
+                "resume",
+                "I have never used Go in production.",
+                tags=["experience"],
+            )
+        ],
+    )
+    output = FitAnalysisOutput(
+        job_id="J1",
+        aligned_skills=[
+            EvidenceClaim(
+                claim="Go: aligned",
+                evidence_ids=["resume-negated-go"],
+            )
+        ],
+    )
+
+    result, repairs = post_validate(output, inp)
+
+    assert result.aligned_skills == []
+    assert [claim.claim.split(":")[0] for claim in result.genuine_gaps] == ["Go"]
+    assert any("semantically unrelated evidence" in repair for repair in repairs)
+
+
+def test_project_claim_keeps_only_the_compared_portfolio_record() -> None:
+    portfolio = [
+        make_portfolio_project("P1", "Relevant Project", technologies=["Python"]),
+        make_portfolio_project("P2", "Unrelated Project", technologies=["Rust"]),
+    ]
+    inp = _base_input(
+        portfolio=portfolio,
+        current=["Relevant Project"],
+    )
+    output = FitAnalysisOutput(
+        job_id="J1",
+        project_analysis=[
+            EvidenceClaim(
+                claim="Current project 'Relevant Project' aligns with this job.",
+                evidence_ids=["portfolio-P1", "portfolio-P2"],
+            )
+        ],
+    )
+
+    result, repairs = post_validate(output, inp)
+
+    assert result.project_analysis[0].evidence_ids == [
+        "job-J1-description",
+        "portfolio-P1",
+    ]
+    assert any("portfolio-P2" in repair for repair in repairs)

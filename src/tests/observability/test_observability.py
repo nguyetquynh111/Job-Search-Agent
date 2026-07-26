@@ -218,6 +218,17 @@ def test_same_trace_id_is_propagated_through_nested_stages() -> None:
         "output_tokens": 2,
     }
     assert generation["model_parameters"]["temperature"] == 0
+    local_generation = next(
+        event
+        for event in tracer.events
+        if event.observation_type == "GENERATION"
+    )
+    assert local_generation.model == "test-model"
+    assert local_generation.model_parameters == {"temperature": 0}
+    assert local_generation.usage == {
+        "input_tokens": 2,
+        "output_tokens": 2,
+    }
 
 
 def test_resume_after_interrupt_can_remain_nested_under_human_review() -> None:
@@ -240,7 +251,7 @@ def test_resume_after_interrupt_can_remain_nested_under_human_review() -> None:
         "tailor_resume_job_1",
         parent_observation_id=review_id,
     ) as tool_id:
-        with tracer.span("resume_latex_compilation"):
+        with tracer.span("resume_tailoring.compile_pdf"):
             pass
 
     memory = next(call for call in client.span_calls if call["name"] == "memory_write")
@@ -248,7 +259,9 @@ def test_resume_after_interrupt_can_remain_nested_under_human_review() -> None:
         call for call in client.span_calls if call["name"] == "tailor_resume_job_1"
     )
     compile_span = next(
-        call for call in client.span_calls if call["name"] == "resume_latex_compilation"
+        call
+        for call in client.span_calls
+        if call["name"] == "resume_tailoring.compile_pdf"
     )
     assert memory["parent_observation_id"] == review_id
     assert tool["parent_observation_id"] == review_id
@@ -365,6 +378,34 @@ def test_streamlit_rerun_state_does_not_duplicate_root_trace() -> None:
     assert session["current_run_id"] == "run-rerun"
     assert session["current_thread_id"] == "thread-rerun"
     assert len(client.trace_calls) == 1
+
+
+def test_new_process_continues_checkpointed_remote_root_trace() -> None:
+    client = FakeLangfuseClient()
+    first = TraceManager(client=client, enabled=True)
+    trace_id = first.start_run("run-restart", "thread-restart")
+    with first.span("human_review") as review_id:
+        pass
+
+    resumed = TraceManager(client=client, enabled=True)
+    resumed.continue_run(
+        run_id="run-restart",
+        session_id="thread-restart",
+        trace_id=trace_id,
+        trace_url="https://example.test/trace",
+    )
+    with resumed.span(
+        "memory_write",
+        parent_observation_id=review_id,
+        input={"provenance": "human_review"},
+    ):
+        pass
+
+    assert {call["id"] for call in client.trace_calls} == {trace_id}
+    resumed_span = client.span_calls[-1]
+    assert resumed_span["trace_id"] == trace_id
+    assert resumed_span["parent_observation_id"] == review_id
+    assert resumed.trace_url == "https://example.test/trace"
 
 
 def test_sensitive_credentials_do_not_appear_in_logs_or_status(

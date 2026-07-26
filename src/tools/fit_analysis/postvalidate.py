@@ -130,7 +130,12 @@ def post_validate(
             aligned.append(
                 claim.model_copy(
                     update={
-                        "evidence_ids": ids,
+                        # A valid ID is not automatically valid evidence for this
+                        # claim. Retain only the posted requirement and candidate
+                        # records that semantically support this exact skill.
+                        "evidence_ids": list(
+                            dict.fromkeys([requirement_id, *support_ids])
+                        ),
                         "confidence": confidence.skill_confidence(
                             sources, on_resume=True
                         ),
@@ -150,7 +155,9 @@ def post_validate(
                             f"{skill}: required by the job, not yet on your resume, "
                             f"but evidenced in {where}."
                         ),
-                        "evidence_ids": ids,
+                        "evidence_ids": list(
+                            dict.fromkeys([requirement_id, *support_ids])
+                        ),
                     }
                 )
             )
@@ -215,7 +222,9 @@ def post_validate(
         evidenced_missing.append(
             claim.model_copy(
                 update={
-                    "evidence_ids": ids,
+                    "evidence_ids": list(
+                        dict.fromkeys([requirement_id, *support_ids])
+                    ),
                     "confidence": confidence.skill_confidence(sources, on_resume=False),
                     "notes": _reverdict(claim.notes, verdict.MISSING),
                 }
@@ -455,24 +464,42 @@ def _fix_project_analysis(
         ids = _valid_ids(claim, known_ids, repairs)
         quoted_names = re.findall(r"'([^']+)'|\"([^\"]+)\"", claim.claim)
         project_names = [left or right for left, right in quoted_names]
+        portfolio_ids = [
+            evidence_id
+            for evidence_id in ids
+            if evidence_id in evidence_by_id
+            and evidence_by_id[evidence_id].source == "portfolio"
+        ]
         if project_names:
-            portfolio_items = [
-                evidence_by_id[evidence_id]
-                for evidence_id in ids
-                if evidence_id in evidence_by_id
-                and evidence_by_id[evidence_id].source == "portfolio"
+            supported_portfolio_ids = [
+                evidence_id
+                for evidence_id in portfolio_ids
+                if any(
+                    evidence_supports_project(
+                        evidence_by_id[evidence_id], project_name
+                    )
+                    for project_name in project_names
+                )
             ]
-            if not any(
-                evidence_supports_project(item, name)
-                for name in project_names
-                for item in portfolio_items
-            ):
+            if not supported_portfolio_ids:
                 repairs.append(
                     "rejected project-analysis claim with no exact portfolio project "
                     f"citation: {claim.claim!r}"
                 )
                 continue
-        ids = list(dict.fromkeys([required_job_id, *ids]))
+            rejected = sorted(set(portfolio_ids) - set(supported_portfolio_ids))
+            if rejected:
+                repairs.append(
+                    "removed unrelated portfolio evidence from project-analysis "
+                    f"claim: {rejected}"
+                )
+        else:
+            # A comparison-wide conclusion (for example, no swap is better)
+            # legitimately cites every portfolio record that was compared.
+            supported_portfolio_ids = portfolio_ids
+        ids = list(
+            dict.fromkeys([required_job_id, *supported_portfolio_ids])
+        )
         clamped = min(1.0, max(0.0, claim.confidence))
         fixed.append(
             claim.model_copy(update={"evidence_ids": ids, "confidence": clamped})

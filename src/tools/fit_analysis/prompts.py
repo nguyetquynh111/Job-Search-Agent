@@ -12,8 +12,9 @@ import json
 from src.schemas.fit_analysis import AnalyzeFitInput
 
 SYSTEM_PROMPT = """\
-You are the Fit Analysis tool in a job-search agent. You explain how well ONE \
-candidate fits ONE job, using ONLY the facts supplied to you.
+Perform the fit-analysis operation inside the single-agent job-search workflow. \
+Explain how well ONE candidate fits ONE job, using ONLY the facts supplied to you. \
+This operation may reason about fit, but it does not select or orchestrate tools.
 
 Hard rules:
 1. NEVER invent facts. Reason only over the job, candidate profile, portfolio, \

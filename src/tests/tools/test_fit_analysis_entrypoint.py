@@ -89,6 +89,12 @@ def test_no_better_swap_available_is_stated(monkeypatch) -> None:
         "no project swap is recommended" in c.claim.lower()
         for c in result.project_analysis
     )
+    conclusion = next(
+        claim
+        for claim in result.project_analysis
+        if "no project swap is recommended" in claim.claim.lower()
+    )
+    assert {"portfolio-P1", "portfolio-P2"} <= set(conclusion.evidence_ids)
 
 
 def test_swapped_out_project_is_never_reported_as_strong(monkeypatch) -> None:

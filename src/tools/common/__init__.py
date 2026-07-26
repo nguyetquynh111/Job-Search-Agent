@@ -2,8 +2,14 @@
 
 from src.tools.common.latex import (
     escape_latex,
+    pdflatex_command,
     pdf_page_count,
     run_pdflatex,
 )
 
-__all__ = ["escape_latex", "pdf_page_count", "run_pdflatex"]
+__all__ = [
+    "escape_latex",
+    "pdflatex_command",
+    "pdf_page_count",
+    "run_pdflatex",
+]

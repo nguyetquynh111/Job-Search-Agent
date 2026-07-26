@@ -8,10 +8,12 @@ import langchain_openai
 import pytest
 from pypdf import PdfWriter
 
+from src.agent import graph as graph_module
 from src.agent.controller import AgentIntent, SingleAgentController
 from src.agent.graph import (
     build_agent_graph,
     create_memory_checkpointer,
+    create_sqlite_checkpointer,
     invoke_new_run,
     resume_run,
 )
@@ -252,16 +254,19 @@ def test_llm_can_choose_tool_and_target_when_multiple_actions_are_valid(
     jobs = load_jobs_csv("data/jobs.csv")[:3]
     profile = load_candidate_profile("data/preferences.yaml")
     chosen_job_id = jobs[0].job_id
+    model_intent = [
+        AgentIntent(
+            phase="FIT_ANALYSIS",
+            selected_tool="tailor_resume",
+            target_job_id=chosen_job_id,
+            decision_summary="Tailor the analyzed job before analyzing another.",
+        )
+    ]
 
     class FakeStructuredModel:
         def invoke(self, messages):
             captured_messages.extend(messages)
-            return AgentIntent(
-                phase="FIT_ANALYSIS",
-                selected_tool="tailor_resume",
-                target_job_id=chosen_job_id,
-                decision_summary="Tailor the analyzed job before analyzing another.",
-            )
+            return model_intent[0]
 
     class FakeChatOpenAI:
         def __init__(self, **kwargs) -> None:
@@ -316,6 +321,19 @@ def test_llm_can_choose_tool_and_target_when_multiple_actions_are_valid(
     assert generations[0].output["selected_tool"] == "tailor_resume"
     assert generations[0].output["target_job_id"] == chosen_job_id
 
+    other_job_id = jobs[1].job_id
+    model_intent[0] = AgentIntent(
+        phase="FIT_ANALYSIS",
+        selected_tool="analyze_fit",
+        target_job_id=other_job_id,
+        decision_summary="Analyze another eligible Top-3 job first.",
+    )
+    alternative = controller.decide(state)
+
+    assert alternative.selected_tool == "analyze_fit"
+    assert alternative.target_job_id == other_job_id
+    assert alternative.decision_source == "llm"
+
 
 def test_invalid_model_action_is_blocked_by_prerequisite_guard(
     tmp_path: Path, monkeypatch
@@ -360,3 +378,185 @@ def test_invalid_model_action_is_blocked_by_prerequisite_guard(
 
     with pytest.raises(Exception, match="unavailable action"):
         controller._llm_decide(state)
+
+
+def test_workflow_stops_with_actionable_error_when_fewer_than_three_jobs_survive(
+    tmp_path: Path,
+) -> None:
+    registry = _contract_registry(tmp_path / "outputs")
+
+    def keep_only_two(value: FilterJobsInput) -> FilterJobsOutput:
+        return FilterJobsOutput(
+            accepted_jobs=value.jobs[:2],
+            rejected_jobs=[],
+        )
+
+    original = registry["filter_jobs"]
+    registry["filter_jobs"] = ToolSpec(
+        name=original.name,
+        func=keep_only_two,
+        input_model=original.input_model,
+        output_model=original.output_model,
+        description=original.description,
+    )
+    app = build_agent_graph(
+        tools=registry,
+        checkpointer=create_memory_checkpointer(),
+        tracer=TraceManager(enabled=False),
+    )
+    state = create_initial_state(
+        thread_id="thread-too-few",
+        run_id="run-too-few",
+        memory_file=str(tmp_path / "memory.json"),
+    )
+
+    result = invoke_new_run(app, state)
+
+    assert result["status"] == "FAILED"
+    assert result["phase"] == "ERROR"
+    assert result["top_3_job_ids"] == []
+    assert "accepted only 2" in result["errors"][-1]["message"]
+    assert "Add more job inputs" in result["errors"][-1]["message"]
+
+
+def test_review_interrupt_resumes_after_process_restart_with_sqlite(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "outputs"))
+    db_path = tmp_path / "outputs" / "checkpoints.sqlite"
+    memory_file = tmp_path / "outputs" / "memory.json"
+    thread_id = "thread-sqlite-restart"
+    registry = _contract_registry(tmp_path / "outputs")
+
+    first_checkpointer, first_context = create_sqlite_checkpointer(db_path)
+    try:
+        first_app = build_agent_graph(
+            tools=registry,
+            checkpointer=first_checkpointer,
+            tracer=TraceManager(enabled=False),
+        )
+        waiting = invoke_new_run(
+            first_app,
+            create_initial_state(
+                thread_id=thread_id,
+                run_id="run-sqlite-restart",
+                memory_file=str(memory_file),
+            ),
+        )
+        payload = waiting["__interrupt__"][0].value
+        original_trace_id = waiting["trace_id"]
+        original_review_parent = waiting["review_trace_parent_id"]
+    finally:
+        first_context.__exit__(None, None, None)
+
+    second_tracer = TraceManager(enabled=False)
+    second_checkpointer, second_context = create_sqlite_checkpointer(db_path)
+    try:
+        second_app = build_agent_graph(
+            tools=registry,
+            checkpointer=second_checkpointer,
+            tracer=second_tracer,
+        )
+        feedback = {
+            job_id: {"decision": "approve", "comment": ""}
+            for job_id in payload["resumes"]
+        }
+        rejected = next(iter(payload["resumes"]))
+        feedback[rejected] = {
+            "decision": "reject",
+            "comment": "Make the two experience bullets shorter.",
+        }
+        final = resume_run(second_app, thread_id, feedback)
+    finally:
+        second_context.__exit__(None, None, None)
+
+    assert final["status"] == "COMPLETED"
+    assert final["trace_id"] == original_trace_id
+    assert final["review_trace_parent_id"] == original_review_parent
+    assert len(final["review_history"]) == 1
+    assert not final.get("__interrupt__")
+    feedback_event = next(
+        event
+        for event in second_tracer.events
+        if event.name == "human_review_feedback"
+    )
+    assert feedback_event.parent_observation_id == original_review_parent
+
+
+def test_graph_executes_model_selected_eligible_tool_without_substitution(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "outputs"))
+    jobs = load_jobs_csv("data/jobs.csv")[:3]
+    profile = load_candidate_profile("data/preferences.yaml")
+    portfolio = load_portfolio("data/portfolio.txt")
+    selected_job_id = jobs[0].job_id
+
+    class ModelFirstController:
+        def __init__(self, registry, tracer=None) -> None:
+            self.policy = SingleAgentController(
+                registry,
+                model_name="model-selected-test",
+                enable_llm=False,
+                tracer=tracer,
+            )
+            self.model_name = "model-selected-test"
+            self.first = True
+
+        def decide(self, state):
+            if self.first:
+                self.first = False
+                actions = self.policy._allowed_actions(state)
+                decision = self.policy._decision_for_action(
+                    state, "tailor_resume", selected_job_id
+                )
+                return decision.model_copy(
+                    update={
+                        "decision_source": "llm",
+                        "decision_summary": "Tailor the eligible analyzed job now.",
+                        "available_actions": actions,
+                    }
+                )
+            return self.policy.decide(state)
+
+    monkeypatch.setattr(graph_module, "SingleAgentController", ModelFirstController)
+    state = create_initial_state(
+        thread_id="thread-model-execution",
+        run_id="run-model-execution",
+        memory_file=str(tmp_path / "memory.json"),
+    )
+    state.update(
+        {
+            "phase": "FIT_ANALYSIS",
+            "status": "RUNNING",
+            "jobs": [job.model_dump() for job in jobs],
+            "candidate_profile": profile.model_dump(),
+            "portfolio": portfolio.model_dump(),
+            "resume_path": "data/resume.tex",
+            "ranked_jobs": [
+                {"job": job.model_dump(), "score": 90 - index, "rationale": "test"}
+                for index, job in enumerate(jobs)
+            ],
+            "top_3_job_ids": [job.job_id for job in jobs],
+            "fit_analyses": {
+                selected_job_id: FitAnalysisOutput(
+                    job_id=selected_job_id
+                ).model_dump()
+            },
+        }
+    )
+    app = build_agent_graph(
+        tools=_contract_registry(tmp_path / "outputs"),
+        checkpointer=create_memory_checkpointer(),
+        tracer=TraceManager(enabled=False),
+    )
+
+    waiting = invoke_new_run(app, state)
+
+    assert waiting["agent_decisions"][0]["decision_source"] == "llm"
+    assert waiting["agent_decisions"][0]["selected_tool"] == "tailor_resume"
+    assert waiting["agent_decisions"][0]["target_job_id"] == selected_job_id
+    assert waiting["tool_history"][0]["tool"] == "tailor_resume"
+    assert (
+        waiting["tool_history"][0]["output"]["job_id"] == selected_job_id
+    )

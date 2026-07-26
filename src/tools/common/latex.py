@@ -35,6 +35,19 @@ def pdf_page_count(path: Path) -> int:
     return len(PdfReader(str(path)).pages)
 
 
+def pdflatex_command(tex_path: Path) -> list[str]:
+    """Return the exact production compilation command for one TeX source."""
+
+    return [
+        "pdflatex",
+        "-interaction=nonstopmode",
+        "-halt-on-error",
+        "-output-directory",
+        str(tex_path.parent),
+        str(tex_path),
+    ]
+
+
 def run_pdflatex(
     tex_path: Path,
     *,
@@ -45,14 +58,7 @@ def run_pdflatex(
 
     try:
         result = subprocess.run(
-            [
-                "pdflatex",
-                "-interaction=nonstopmode",
-                "-halt-on-error",
-                "-output-directory",
-                str(tex_path.parent),
-                str(tex_path),
-            ],
+            pdflatex_command(tex_path),
             capture_output=True,
             text=True,
             timeout=timeout_seconds,

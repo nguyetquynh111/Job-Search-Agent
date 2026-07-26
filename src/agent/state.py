@@ -33,6 +33,8 @@ class AgentState(TypedDict, total=False):
     top_3_job_ids: list[str]
 
     fit_analyses: dict[str, dict[str, Any]]
+    fit_analysis_artifacts: dict[str, dict[str, str]]
+    fit_analysis_refresh_job_ids: list[str]
     tailoring_results: dict[str, dict[str, Any]]
     review_decisions: dict[str, dict[str, Any]]
     approved_job_ids: list[str]
@@ -93,6 +95,8 @@ def create_initial_state(
         ranked_jobs=[],
         top_3_job_ids=[],
         fit_analyses={},
+        fit_analysis_artifacts={},
+        fit_analysis_refresh_job_ids=[],
         tailoring_results={},
         review_decisions={},
         approved_job_ids=[],

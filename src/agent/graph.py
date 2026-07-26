@@ -57,6 +57,7 @@ from src.review.review_service import (
 from src.schemas.common import normalize_string_list
 from src.schemas.jobs import Job
 from src.tools.evidence_validation import job_evidence_supports_skill
+from src.tools.fit_analysis.render import build_source_labels, write_fit_analysis
 from src.tools.job_evidence import build_job_evidence
 from src.tools.registry import ToolSpec, load_tool_registry
 
@@ -332,6 +333,19 @@ def build_agent_graph(
                     "pending_revision_job_ids": state.get(
                         "pending_revision_job_ids", []
                     ),
+                    "current_workflow_state": {
+                        "fit_analysis_completed": sorted(
+                            state.get("fit_analyses", {})
+                        ),
+                        "tailoring_completed": sorted(
+                            state.get("tailoring_results", {})
+                        ),
+                        "approved_job_ids": state.get("approved_job_ids", []),
+                        "cover_letters_completed": sorted(
+                            state.get("cover_letter_results", {})
+                        ),
+                        "revision_round": int(state.get("revision_round", 0)),
+                    },
                 },
                 parent_observation_id=_workflow_trace_parent(state),
             ) as controller_span:
@@ -347,17 +361,20 @@ def build_agent_graph(
                         "unresolved_requirements": decision.unresolved_requirements,
                     },
                     metadata={
-                        "available_tool_names": sorted(
+                        "available_tools": sorted(
                             {
                                 action["tool_name"]
                                 for action in decision.available_actions
                             }
                         ),
                         "available_action_count": len(decision.available_actions),
-                        "tool_name": decision.selected_tool,
+                        "selected_tool": decision.selected_tool,
+                        "target_job_id": decision.target_job_id,
                         "model_name": controller.model_name,
                         "system_prompt_version": CONTROLLER_SYSTEM_PROMPT_VERSION,
                         "decision_source": decision.decision_source,
+                        "decision_reason": decision.decision_summary,
+                        "evidence_ids": decision.evidence_ids,
                     },
                 )
             return {
@@ -417,6 +434,9 @@ def build_agent_graph(
                 state.get("current_tool_input", {})
             )
             metadata.update(_tool_input_metadata(tool_name, input_model))
+            metadata["configuration"] = _tool_trace_input(
+                tool_name, input_model
+            )["configuration"]
             if tool_name == "tailor_resume":
                 metadata["revision_round"] = int(state.get("revision_round", 0))
             span_name = _span_name_for_tool(tool_name, state, input_model)
@@ -432,6 +452,47 @@ def build_agent_graph(
                     if isinstance(raw_output, BaseModel)
                     else raw_output
                 )
+                if (
+                    tool_name == "filter_jobs"
+                    and len(output_model.accepted_jobs) < 3
+                ):
+                    raise ToolExecutionError(
+                        "Exactly three Top jobs are required, but filtering accepted "
+                        f"only {len(output_model.accepted_jobs)}. Add more job inputs "
+                        "or relax the filtering preferences."
+                    )
+                fit_artifact_paths: dict[str, str] = {}
+                if tool_name == "analyze_fit":
+                    with trace_manager.span(
+                        "fit_analysis.write_artifacts",
+                        {
+                            **_state_metadata(state),
+                            "tool_name": tool_name,
+                            "job_id": output_model.job_id,
+                        },
+                        input={
+                            "formats": ["markdown", "json"],
+                            "validated_analysis": True,
+                        },
+                    ) as artifact_span:
+                        md_path, json_path = write_fit_analysis(
+                            output_model,
+                            input_model.job,
+                            source_labels=build_source_labels(input_model),
+                        )
+                        fit_artifact_paths = {
+                            "markdown_path": str(md_path),
+                            "json_path": str(json_path),
+                        }
+                        trace_manager.update_span(
+                            artifact_span,
+                            metadata=fit_artifact_paths,
+                            output={
+                                **fit_artifact_paths,
+                                "markdown_exists": md_path.is_file(),
+                                "json_exists": json_path.is_file(),
+                            },
+                        )
                 if tool_name in {"tailor_resume", "generate_cover_letter"}:
                     validation_input = _tool_output_metadata(tool_name, output_model)
                     with trace_manager.span(
@@ -456,11 +517,17 @@ def build_agent_graph(
                 )
                 trace_manager.update_span(
                     tool_span,
+                    metadata=(
+                        {"artifact_paths": fit_artifact_paths}
+                        if fit_artifact_paths
+                        else None
+                    ),
                     output={
                         "result": output_model.model_dump(),
                         "summary": _tool_output_metadata(
                             tool_name, output_model
                         ),
+                        "artifact_paths": fit_artifact_paths,
                     },
                 )
             if tool_name == "score_jobs":
@@ -487,6 +554,11 @@ def build_agent_graph(
                         },
                     )
             updates = _apply_tool_output(state, tool_name, output_model)
+            if fit_artifact_paths:
+                updates["fit_analysis_artifacts"] = {
+                    **state.get("fit_analysis_artifacts", {}),
+                    output_model.job_id: fit_artifact_paths,
+                }
             updates.update(_trace_state(trace_manager))
             return updates
         except Exception as exc:
@@ -790,6 +862,9 @@ def build_agent_graph(
             affected_job_ids = _affected_jobs_for_memory(
                 state, learned_facts, always_include=rejected
             )
+            analysis_refresh_job_ids = _affected_jobs_for_memory(
+                state, learned_facts
+            )
             if not affected_job_ids:
                 assert_cover_letters_allowed(
                     state.get("top_3_job_ids", []), state.get("approved_job_ids", [])
@@ -827,6 +902,7 @@ def build_agent_graph(
                     "result_count": len(affected_job_ids),
                     "rejected_job_ids": rejected,
                     "affected_job_ids": affected_job_ids,
+                    "fit_analysis_refresh_job_ids": analysis_refresh_job_ids,
                     "new_memory_fact_ids": learned_fact_ids,
                     "status": "OK",
                 },
@@ -840,12 +916,18 @@ def build_agent_graph(
                     revision_span,
                     output={
                         "affected_job_ids": affected_job_ids,
-                        "next_phase": Phase.TAILOR.value,
+                        "fit_analysis_refresh_job_ids": analysis_refresh_job_ids,
+                        "next_phase": (
+                            Phase.FIT_ANALYSIS.value
+                            if analysis_refresh_job_ids
+                            else Phase.TAILOR.value
+                        ),
                     },
                 )
                 return {
                     "revision_round": next_round,
                     "pending_revision_job_ids": affected_job_ids,
+                    "fit_analysis_refresh_job_ids": analysis_refresh_job_ids,
                     "revision_round_job_ids": affected_job_ids,
                     "revision_trace_parent_id": revision_span,
                     "approved_job_ids": [
@@ -853,7 +935,11 @@ def build_agent_graph(
                         for job_id in state.get("approved_job_ids", [])
                         if job_id not in affected_job_ids
                     ],
-                    "phase": Phase.TAILOR.value,
+                    "phase": (
+                        Phase.FIT_ANALYSIS.value
+                        if analysis_refresh_job_ids
+                        else Phase.TAILOR.value
+                    ),
                     "status": RunStatus.RUNNING.value,
                     **_trace_state(trace_manager),
                 }
@@ -1154,12 +1240,28 @@ def _apply_tool_output(
         )
     elif tool_name == "analyze_fit":
         analyses = {**state.get("fit_analyses", {}), output["job_id"]: output}
-        next_phase = (
-            Phase.TAILOR.value
-            if all(job_id in analyses for job_id in top_3_job_ids)
-            else Phase.FIT_ANALYSIS.value
+        refresh = [
+            job_id
+            for job_id in state.get("fit_analysis_refresh_job_ids", [])
+            if job_id != output["job_id"]
+        ]
+        if refresh:
+            next_phase = Phase.FIT_ANALYSIS.value
+        elif state.get("pending_revision_job_ids", []):
+            next_phase = Phase.TAILOR.value
+        else:
+            next_phase = (
+                Phase.TAILOR.value
+                if all(job_id in analyses for job_id in top_3_job_ids)
+                else Phase.FIT_ANALYSIS.value
+            )
+        updates.update(
+            {
+                "fit_analyses": analyses,
+                "fit_analysis_refresh_job_ids": refresh,
+                "phase": next_phase,
+            }
         )
-        updates.update({"fit_analyses": analyses, "phase": next_phase})
     elif tool_name == "tailor_resume":
         tailoring = {**state.get("tailoring_results", {}), output["job_id"]: output}
         was_revision = output["job_id"] in state.get("pending_revision_job_ids", [])
@@ -1536,6 +1638,16 @@ def _validate_artifact_output(tool_name: str, output_model: BaseModel) -> None:
 
 def _sync_trace_manager(state: AgentState, tracer: TraceManager) -> None:
     run_id = state.get("run_id")
+    trace_id = state.get("trace_id")
+    thread_id = state.get("thread_id")
+    if run_id and trace_id and thread_id:
+        tracer.continue_run(
+            run_id=run_id,
+            session_id=thread_id,
+            trace_id=trace_id,
+            trace_url=state.get("trace_url"),
+        )
+        return
     if run_id and tracer.run_id != run_id:
         tracer.run_id = run_id
         tracer.trace_id = None
@@ -1545,11 +1657,9 @@ def _sync_trace_manager(state: AgentState, tracer: TraceManager) -> None:
         tracer._active_spans.clear()
         tracer._span_stack.clear()
         tracer._personal_values.clear()
-    trace_id = state.get("trace_id")
     if trace_id:
         tracer.trace_id = trace_id
         tracer._root_recorded = True
-    thread_id = state.get("thread_id")
     if thread_id:
         tracer.session_id = thread_id
     trace_url = state.get("trace_url")

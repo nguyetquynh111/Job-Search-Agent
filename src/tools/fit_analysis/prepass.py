@@ -594,15 +594,29 @@ def build_project_section(
             )
         )
     if swap.swap is None:
+        compared_portfolio_ids = [
+            evidence_id
+            for ranked in swap.rankings
+            for evidence_id in ranked.project.evidence_ids
+        ]
         claims.append(
             EvidenceClaim(
                 claim=(
                     "Current resume projects are already the strongest available match "
                     "for this job; no project swap is recommended."
                 ),
-                evidence_ids=[job_context_evidence_id]
-                if job_context_evidence_id
-                else [],
+                evidence_ids=list(
+                    dict.fromkeys(
+                        [
+                            *(
+                                [job_context_evidence_id]
+                                if job_context_evidence_id
+                                else []
+                            ),
+                            *compared_portfolio_ids,
+                        ]
+                    )
+                ),
                 confidence=0.75,
                 notes=verdict.tag(verdict.MATCH),
             )

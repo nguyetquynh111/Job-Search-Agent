@@ -57,6 +57,9 @@ class TraceEvent:
     observation_type: str = "SPAN"
     input: Any = None
     output: Any = None
+    model: str | None = None
+    model_parameters: dict[str, Any] = field(default_factory=dict)
+    usage: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -187,6 +190,51 @@ class TraceManager:
         """Backward-compatible alias for starting the workflow trace."""
 
         return self.start_run(run_id=run_id, session_id=thread_id, metadata=metadata)
+
+    def continue_run(
+        self,
+        *,
+        run_id: str,
+        session_id: str,
+        trace_id: str,
+        trace_url: str | None = None,
+    ) -> None:
+        """Reattach a new process to an existing checkpointed root trace."""
+
+        if (
+            self.run_id == run_id
+            and self.trace_id == trace_id
+            and self._root_recorded
+        ):
+            if trace_url:
+                self.trace_url = trace_url
+            return
+        self.run_id = run_id
+        self.session_id = session_id
+        self.trace_id = trace_id
+        self.trace_url = trace_url
+        self._root_recorded = True
+        self._active_spans.clear()
+        self._span_stack.clear()
+        if self.enabled and self.client is not None:
+            try:
+                # Langfuse v2 upserts by ID, so resumed observations remain on
+                # the original remote root rather than creating another trace.
+                self._root_client = self.client.trace(
+                    id=trace_id,
+                    name=ROOT_TRACE_NAME,
+                    session_id=session_id,
+                    metadata={"run_id": run_id, "resumed_from_checkpoint": True},
+                    public=True,
+                )
+                if not self.trace_url and hasattr(
+                    self._root_client, "get_trace_url"
+                ):
+                    self.trace_url = self._root_client.get_trace_url()
+            except Exception:
+                self._disable_remote_tracing(
+                    "Langfuse trace continuation failed; using no-op tracing"
+                )
 
     def update_run(
         self,
@@ -402,6 +450,9 @@ class TraceManager:
                 observation_type="GENERATION",
                 input=safe_messages,
                 output=safe_response,
+                model=model,
+                model_parameters=safe_parameters,
+                usage=safe_usage,
             )
         )
         if self.enabled and self.client is not None and self.trace_id:
@@ -433,6 +484,7 @@ class TraceManager:
         """Record a sanitized error event under the active observation."""
 
         error_type = error if isinstance(error, str) else error.__class__.__name__
+        error_message = str(error)
         observation_id = uuid4().hex
         parent_id = self.current_observation_id
         payload = self.sanitize(
@@ -441,6 +493,7 @@ class TraceManager:
                 "session_id": self.session_id,
                 "trace_id": self.trace_id,
                 "error_type": str(error_type),
+                "error_message": error_message,
                 **(metadata or {}),
             }
         )
@@ -452,7 +505,10 @@ class TraceManager:
             observation_id=observation_id,
             parent_observation_id=parent_id,
             observation_type="EVENT",
-            output={"error_type": str(error_type)},
+            output={
+                "error_type": str(error_type),
+                "error_message": self.sanitize(error_message),
+            },
         )
         self.events.append(event)
         if self.enabled and self.client is not None and self.trace_id:

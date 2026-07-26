@@ -28,3 +28,16 @@ def test_legacy_shared_tools_directory_is_absent() -> None:
 
 def test_tests_are_grouped_by_domain() -> None:
     assert sorted(Path("src/tests").glob("test_*.py")) == []
+
+
+def test_single_agent_source_has_no_worker_or_coordinator_abstractions() -> None:
+    source = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in sorted(Path("src").rglob("*.py"))
+        if "tests" not in path.parts
+    ).casefold()
+
+    assert "class supervisor" not in source
+    assert "class workeragent" not in source
+    assert "class coordinator" not in source
+    assert source.count("you are the only llm agent") == 1
