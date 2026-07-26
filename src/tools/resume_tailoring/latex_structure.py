@@ -1,15 +1,9 @@
-"""Structure-aware parsing for ordinary LaTeX resumes.
-
-The parser deliberately relies on LaTeX sections, list environments, and the
-commands already present in the uploaded source.  It never requires template
-annotations or rewrites the document around a new template.
-"""
+"""Structural LaTeX resume parsing for safe targeted edits."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import re
-
+from dataclasses import dataclass
 
 SECTION_ALIASES = {
     "summary": {"professional summary", "summary"},
@@ -188,8 +182,10 @@ def _locate_sections(source: str) -> dict[str, LatexSection]:
                 f"Multiple plausible {category} sections were found; refusing an "
                 "ambiguous edit."
             )
-        end = matches[index + 1][0] if index + 1 < len(matches) else _document_end(
-            source, command_end
+        end = (
+            matches[index + 1][0]
+            if index + 1 < len(matches)
+            else _document_end(source, command_end)
         )
         located[category] = LatexSection(
             category=category,
@@ -219,8 +215,7 @@ def _summary_content_range(source: str, section: LatexSection) -> TextRange:
     meaningful = [
         line
         for line in lines
-        if line.group(0).strip()
-        and not line.group(0).lstrip().startswith("%")
+        if line.group(0).strip() and not line.group(0).lstrip().startswith("%")
     ]
     if not meaningful:
         raise LatexStructureError("The Summary section contains no editable text.")
@@ -255,9 +250,7 @@ def _section_bullets(
         for item in items
         if item.depth == deepest
         and latex_to_plain(item.content(source))
-        and not re.search(
-            r"\\(?:begin\{tabular|resumeEntry)\b", item.content(source)
-        )
+        and not re.search(r"\\(?:begin\{tabular|resumeEntry)\b", item.content(source))
     ]
     if category == "experience" and len(candidates) < 2:
         return []
@@ -318,7 +311,9 @@ def _items_in_range(source: str, start: int, end: int) -> list[LatexItem]:
             env_end = _matching_itemize_end(source, content_range.start, end, depth)
             block_end = min([*candidates, env_end, end])
             content_end = block_end
-            while content_end > content_range.start and source[content_end - 1].isspace():
+            while (
+                content_end > content_range.start and source[content_end - 1].isspace()
+            ):
                 content_end -= 1
             content_range = TextRange(content_range.start, content_end)
         next_peer = next(
@@ -364,11 +359,9 @@ def _project_entries(source: str, section: LatexSection) -> list[ProjectEntry]:
             resume_entries.append((absolute, tuple(fields)))
     if resume_entries:
         entries: list[ProjectEntry] = []
-        for index, (entry_start, fields) in enumerate(resume_entries):
+        for index, (entry_start, field_ranges) in enumerate(resume_entries):
             entry_end = (
-                resume_entries[index + 1][0]
-                if index + 1 < len(resume_entries)
-                else end
+                resume_entries[index + 1][0] if index + 1 < len(resume_entries) else end
             )
             block_start = _line_start(source, entry_start)
             block_end = entry_end
@@ -376,14 +369,14 @@ def _project_entries(source: str, section: LatexSection) -> list[ProjectEntry]:
                 block_end -= 1
             bullets = tuple(
                 item
-                for item in _items_in_range(source, fields[-1].end, entry_end)
+                for item in _items_in_range(source, field_ranges[-1].end, entry_end)
                 if item.command.lower() != "item" or item.depth > 0
             )
             entries.append(
                 ProjectEntry(
-                    name=latex_to_plain(fields[0].text(source)),
+                    name=latex_to_plain(field_ranges[0].text(source)),
                     block_range=TextRange(block_start, block_end),
-                    field_ranges=fields,
+                    field_ranges=field_ranges,
                     bullets=bullets,
                     command="resumeEntry",
                 )
@@ -406,7 +399,9 @@ def _project_entries(source: str, section: LatexSection) -> list[ProjectEntry]:
         nested = tuple(
             candidate
             for candidate in items
-            if item.block_range.start < candidate.block_range.start < item.block_range.end
+            if item.block_range.start
+            < candidate.block_range.start
+            < item.block_range.end
             and candidate.depth > item.depth
         )
         entries.append(

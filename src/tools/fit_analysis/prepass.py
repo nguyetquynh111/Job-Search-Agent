@@ -13,18 +13,18 @@ import logging
 import re
 from dataclasses import dataclass, field
 
-from src.schemas.common import EvidenceClaim, EvidenceItem, ProjectSwap
-from src.schemas.fit_analysis import AnalyzeFitInput, FitAnalysisOutput
-from src.tools.fit_analysis import confidence, verdict
-from src.tools.fit_analysis.aliases import (
+from src.domain import EvidenceClaim, EvidenceItem, ProjectSwap
+from src.tools.fit_analysis.contracts import AnalyzeFitInput, FitAnalysisOutput
+import src.tools.fit_analysis.rules as rules
+from src.utils.skill_matching import (
     canonicalize,
     category_members,
     skill_in_text,
 )
 from src.tools.fit_analysis.evidence_index import EvidenceIndex
-from src.tools.fit_analysis.sanitize import sanitize_text
+from src.tools.fit_analysis.rules import sanitize_text
 from src.tools.fit_analysis.swap import SwapDecision, build_project_swap
-from src.tools.job_evidence import job_evidence_id, job_skill_evidence_id
+from src.utils.job_evidence import job_evidence_id, job_skill_evidence_id
 
 logger = logging.getLogger(__name__)
 
@@ -299,15 +299,15 @@ def _relevant_experience(
                 f"{where}: centered on {focus[:200]} — aligns with the job's focus on "
                 f"{', '.join(matched[:4])}."
             )
-            note = verdict.tag(
-                verdict.MATCH, f"Overlaps required skills: {', '.join(matched)}"
+            note = rules.tag(
+                rules.MATCH, f"Overlaps required skills: {', '.join(matched)}"
             )
         else:
             claim_text = (
                 f"{where}: centered on {focus[:200]} — limited overlap with the job's focus "
                 f"on {job_focus}."
             )
-            note = verdict.tag(verdict.PARTIAL, "No direct required-skill overlap.")
+            note = rules.tag(rules.PARTIAL, "No direct required-skill overlap.")
         claims.append(
             EvidenceClaim(
                 claim=claim_text,
@@ -315,7 +315,7 @@ def _relevant_experience(
                     job_evidence_id(inp.job, "description"),
                     item.evidence_id,
                 ],
-                confidence=confidence.narrative_confidence(2),
+                confidence=rules.narrative_confidence(2),
                 notes=note,
             )
         )
@@ -326,14 +326,14 @@ def _seniority_verdict(candidate_years, required_min) -> str:
     """Return the seniority verdict from candidate vs required years."""
 
     if required_min is None:
-        return verdict.MATCH  # No requirement was stated.
+        return rules.MATCH  # No requirement was stated.
     if candidate_years is None:
-        return verdict.PARTIAL
+        return rules.PARTIAL
     if candidate_years >= required_min:
-        return verdict.MATCH
+        return rules.MATCH
     if candidate_years >= 0.6 * required_min:
-        return verdict.PARTIAL
-    return verdict.MISMATCH
+        return rules.PARTIAL
+    return rules.MISMATCH
 
 
 def _seniority(inp: AnalyzeFitInput) -> list[EvidenceClaim]:
@@ -366,11 +366,11 @@ def _seniority(inp: AnalyzeFitInput) -> list[EvidenceClaim]:
         or "candidate seniority could not be verified from cited resume history"
     )
 
-    result = _seniority_verdict(years, required) if items else verdict.PARTIAL
+    result = _seniority_verdict(years, required) if items else rules.PARTIAL
     human = {
-        verdict.MATCH: "Meets or exceeds the stated experience.",
-        verdict.PARTIAL: "Close to but below the stated experience.",
-        verdict.MISMATCH: "Falls short of the stated experience.",
+        rules.MATCH: "Meets or exceeds the stated experience.",
+        rules.PARTIAL: "Close to but below the stated experience.",
+        rules.MISMATCH: "Falls short of the stated experience.",
     }[result]
     if (
         required is None
@@ -392,8 +392,8 @@ def _seniority(inp: AnalyzeFitInput) -> list[EvidenceClaim]:
         EvidenceClaim(
             claim=f"Seniority: {candidate_desc} vs job ({job_expectation}).",
             evidence_ids=evidence_ids,
-            confidence=confidence.narrative_confidence(len(evidence_ids)),
-            notes=verdict.tag(result, human),
+            confidence=rules.narrative_confidence(len(evidence_ids)),
+            notes=rules.tag(result, human),
         )
     ]
 
@@ -417,8 +417,8 @@ def _education(inp: AnalyzeFitInput, job_text: str) -> list[EvidenceClaim]:
                     job_evidence_id(inp.job, "description"),
                     item.evidence_id,
                 ],
-                confidence=confidence.narrative_confidence(2),
-                notes=verdict.tag(verdict.MATCH, note),
+                confidence=rules.narrative_confidence(2),
+                notes=rules.tag(rules.MATCH, note),
             )
         )
     return claims
@@ -467,7 +467,7 @@ def _skill_claim(entry: SkillClaim, kind: str) -> EvidenceClaim:
     if kind == "aligned":
         suffix = f" via {via}" if via else ""
         text = f"{entry.skill}: required by the job and present on your resume{suffix}."
-        note = verdict.tag(verdict.MATCH)
+        note = rules.tag(rules.MATCH)
     elif kind == "evidenced_missing":
         where = ", ".join(sorted(entry.sources)) or "supplied evidence"
         suffix = f" via {via}" if via else ""
@@ -478,17 +478,17 @@ def _skill_claim(entry: SkillClaim, kind: str) -> EvidenceClaim:
         human = (
             f"via={via}; " if via else ""
         ) + f"Safe to add during tailoring; evidenced by {where}."
-        note = verdict.tag(verdict.MISSING, human)
+        note = rules.tag(rules.MISSING, human)
     else:
         text = f"{entry.skill}: required by the job with no supporting evidence found."
-        note = verdict.tag(
-            verdict.MISMATCH,
+        note = rules.tag(
+            rules.MISMATCH,
             "No evidence in resume, portfolio, master skills, or memory.",
         )
     return EvidenceClaim(
         claim=text,
         evidence_ids=list(dict.fromkeys([entry.job_evidence_id, *entry.evidence_ids])),
-        confidence=confidence.skill_confidence(entry.sources, entry.on_resume),
+        confidence=rules.skill_confidence(entry.sources, entry.on_resume),
         notes=note,
     )
 
@@ -533,8 +533,8 @@ def build_project_section(
                     if job_context_evidence_id
                     else [],
                     confidence=0.6,
-                    notes=verdict.tag(
-                        verdict.PARTIAL, "No portfolio project with a matching name."
+                    notes=rules.tag(
+                        rules.PARTIAL, "No portfolio project with a matching name."
                     ),
                 )
             )
@@ -552,7 +552,7 @@ def build_project_section(
                 f"Current project '{entry.name}' ({entry.project.project_id}) is the weakest "
                 f"match for this job ({detail}); recommended for swap."
             )
-        elif entry.verdict == verdict.MATCH:
+        elif entry.verdict == rules.MATCH:
             claim_text = (
                 f"Current project '{entry.name}' ({entry.project.project_id}) aligns well "
                 f"with this job ({detail})."
@@ -577,8 +577,8 @@ def build_project_section(
                         ]
                     )
                 ),
-                confidence=0.8 if entry.verdict == verdict.MATCH else 0.7,
-                notes=verdict.tag(entry.verdict),
+                confidence=0.8 if entry.verdict == rules.MATCH else 0.7,
+                notes=rules.tag(entry.verdict),
             )
         )
 
@@ -590,7 +590,7 @@ def build_project_section(
                 if job_context_evidence_id
                 else [],
                 confidence=0.7,
-                notes=verdict.tag(verdict.PARTIAL),
+                notes=rules.tag(rules.PARTIAL),
             )
         )
     if swap.swap is None:
@@ -618,7 +618,7 @@ def build_project_section(
                     )
                 ),
                 confidence=0.75,
-                notes=verdict.tag(verdict.MATCH),
+                notes=rules.tag(rules.MATCH),
             )
         )
     project_swap = swap.swap

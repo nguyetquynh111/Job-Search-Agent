@@ -20,10 +20,10 @@ import logging
 import re
 from dataclasses import dataclass, field
 
-from src.schemas.common import PortfolioProject, ProjectSwap
-from src.schemas.jobs import Job
-from src.tools.fit_analysis import verdict
-from src.tools.fit_analysis.aliases import canonicalize, category_members
+from src.domain import PortfolioProject, ProjectSwap
+from src.domain import Job
+import src.tools.fit_analysis.rules as rules
+from src.utils.skill_matching import canonicalize, category_members
 
 logger = logging.getLogger(__name__)
 
@@ -291,7 +291,7 @@ def build_project_swap(
         bound = lookup.get(normalize_name(name))
         if bound is None:
             unbound.append(name)
-            current.append(CurrentVerdict(name, None, 0.0, verdict.PARTIAL, [], [], []))
+            current.append(CurrentVerdict(name, None, 0.0, rules.PARTIAL, [], [], []))
             logger.info("Resume project not bound to portfolio: %s", name)
             continue
         score = score_by_id[bound.project_id]
@@ -300,9 +300,9 @@ def build_project_swap(
                 name=name,
                 project=bound,
                 score=score.score,
-                verdict=verdict.MATCH
+                verdict=rules.MATCH
                 if (score.matched_distinctive or score.domain_matches)
-                else verdict.PARTIAL,
+                else rules.PARTIAL,
                 distinctive=score.matched_distinctive,
                 domain_matches=score.domain_matches,
                 industry_matches=score.industry_matches,
@@ -321,7 +321,7 @@ def build_project_swap(
         weakest = min(bound_current, key=lambda c: c.score)
         if best_external.score - weakest.score >= SWAP_MIN_MARGIN:
             weakest.removed = True
-            weakest.verdict = verdict.MISMATCH
+            weakest.verdict = rules.MISMATCH
             add_score = best_external
             swap = ProjectSwap(
                 remove_project=weakest.name,
@@ -469,13 +469,13 @@ def choose_swap(
             continue
         if entry.name == remove_name:
             entry.removed = True
-            entry.verdict = verdict.MISMATCH
+            entry.verdict = rules.MISMATCH
         else:
             entry.removed = False
             entry.verdict = (
-                verdict.MATCH
+                rules.MATCH
                 if (entry.distinctive or entry.domain_matches)
-                else verdict.PARTIAL
+                else rules.PARTIAL
             )
 
     if add_score is None:

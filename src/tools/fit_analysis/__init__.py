@@ -1,5 +1,11 @@
-"""Evidence-backed job fit analysis tool."""
+"""Fit-analysis tool package."""
 
-from src.tools.fit_analysis.tool import analyze_fit
+from src.tools.fit_analysis.contracts import AnalyzeFitInput, FitAnalysisOutput
+from src.tools.fit_analysis.fit_analysis import analyze_fit, run_fit_analysis_tool
 
-__all__ = ["analyze_fit"]
+__all__ = [
+    "AnalyzeFitInput",
+    "FitAnalysisOutput",
+    "analyze_fit",
+    "run_fit_analysis_tool",
+]

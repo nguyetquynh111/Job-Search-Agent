@@ -13,7 +13,7 @@ A single-agent job-search application that filters and ranks jobs, generates evi
 Install the command-line TeX distribution:
 
 ```bash
-brew install --cask mactex-no-gui
+brew install --cask basictex
 eval "$(/usr/libexec/path_helper)"
 pdflatex --version
 ```
@@ -52,7 +52,7 @@ OUTPUT_DIR=outputs
 
 ```bash
 conda activate job-search-agent
-python -m streamlit run src/app/app.py
+python -m streamlit run app/app.py
 ```
 
 Open the URL printed by Streamlit, normally:
@@ -124,14 +124,7 @@ master_skills:
 
 ### Resume
 
-The resume must be a compilable LaTeX file whose summary, experience, skills,
-and projects can be identified from conventional `\section` headings and list
-or resume-template commands. Common alternate headings such as `Summary`,
-`Professional Experience`, `Technical Skills`, and `Selected Projects` are
-supported. Standard `\item` bullets and macros such as `\resumeItem` are
-accepted. Tailoring preserves the uploaded template and changes only the
-summary, exactly two existing experience bullets, evidenced skills, and an
-optional portfolio-backed project swap.
+The resume must be a LaTeX file.
 
 ### Portfolio
 
@@ -145,12 +138,6 @@ TECH_STACK
 ```
 
 ## Validation
-
-Verify the configuration:
-
-```bash
-python scripts/preflight.py
-```
 
 Run the test suite:
 

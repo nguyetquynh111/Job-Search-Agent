@@ -12,8 +12,8 @@ import logging
 import re
 from dataclasses import dataclass, field
 
-from src.schemas.common import EvidenceItem
-from src.tools.fit_analysis.aliases import (
+from src.domain import EvidenceItem
+from src.utils.skill_matching import (
     canonicalize,
     curated_vocabulary,
     skill_in_text,

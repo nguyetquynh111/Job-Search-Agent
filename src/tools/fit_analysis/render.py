@@ -12,12 +12,12 @@ import json
 import logging
 from pathlib import Path
 
-from src.config import AppConfig, get_config
-from src.schemas.common import EvidenceClaim
-from src.schemas.fit_analysis import AnalyzeFitInput, FitAnalysisOutput
-from src.schemas.jobs import Job
-from src.tools.fit_analysis import verdict
-from src.tools.job_evidence import build_job_evidence
+from app.configuration import AppConfig, get_config
+from src.domain import EvidenceClaim
+from src.tools.fit_analysis.contracts import AnalyzeFitInput, FitAnalysisOutput
+from src.domain import Job
+import src.tools.fit_analysis.rules as rules
+from src.utils.job_evidence import build_job_evidence
 
 logger = logging.getLogger(__name__)
 
@@ -94,8 +94,8 @@ def _narrative_lines(
         return ["_None._"]
     lines = []
     for claim in claims:
-        value, human = verdict.parse(claim.notes)
-        marker = verdict.marker(value, missing_marker)
+        value, human = rules.parse(claim.notes)
+        marker = rules.marker(value, missing_marker)
         lines.append(f"{marker} {claim.claim}{_citation(claim, labels)}")
     return lines
 
@@ -134,7 +134,7 @@ def _skill_lines(
 def _via_members(claim: EvidenceClaim) -> str:
     """Return the concrete category members named in a claim's notes (or '')."""
 
-    _, human = verdict.parse(claim.notes)
+    _, human = rules.parse(claim.notes)
     if human and human.startswith("via="):
         return human[len("via=") :].split(";", 1)[0].strip()
     return ""

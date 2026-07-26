@@ -20,5 +20,8 @@ PyYAML==6.0.3
 # User interface
 streamlit==1.60.0
 
-# Test runner
+# Test runner and quality checks
 pytest==9.1.1
+pyright==1.1.411
+ruff==0.15.20
+vulture==2.16
