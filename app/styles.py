@@ -12,19 +12,20 @@ def apply_app_styles() -> None:
         """
         <style>
             :root {
-                --ink: #122033;
-                --muted: #617087;
-                --line: #dfe6ef;
-                --panel: rgba(255, 255, 255, 0.92);
-                --brand: #3156d9;
-                --brand-dark: #213da8;
-                --mint: #18a47b;
+                --ink: #182230;
+                --muted: #5d6b7c;
+                --soft: #f6f8fb;
+                --line: #d8e0ea;
+                --panel: #ffffff;
+                --brand: #2563eb;
+                --brand-dark: #1d4ed8;
+                --mint: #0f8f6f;
+                --gold: #b7791f;
+                --rose: #b42318;
             }
 
             .stApp {
-                background:
-                    radial-gradient(circle at 88% 3%, rgba(49, 86, 217, 0.09), transparent 26rem),
-                    linear-gradient(180deg, #f8faff 0%, #f4f7fb 100%);
+                background: #f6f8fb;
                 color: var(--ink);
             }
 
@@ -33,14 +34,14 @@ def apply_app_styles() -> None:
             }
 
             [data-testid="stAppViewContainer"] > .main .block-container {
-                max-width: 1180px;
-                padding-top: 3.25rem;
+                max-width: 1200px;
+                padding-top: 2.25rem;
                 padding-bottom: 5rem;
             }
 
             [data-testid="stSidebar"] {
-                background: #0f1b2d;
-                border-right: 0;
+                background: #111827;
+                border-right: 1px solid #0b1220;
             }
 
             [data-testid="stSidebar"] * {
@@ -48,7 +49,7 @@ def apply_app_styles() -> None:
             }
 
             [data-testid="stSidebar"] [data-testid="stSidebarNav"] a {
-                border-radius: 0.7rem;
+                border-radius: 8px;
                 margin-bottom: 0.2rem;
             }
 
@@ -58,7 +59,7 @@ def apply_app_styles() -> None:
             }
 
             [data-testid="stSidebar"] [data-testid="stPageLink"] a {
-                border-radius: 0.7rem;
+                border-radius: 8px;
                 font-weight: 520;
                 margin-bottom: 0.16rem;
                 padding: 0.48rem 0.65rem;
@@ -91,10 +92,10 @@ def apply_app_styles() -> None:
                 height: 2.25rem;
                 display: grid;
                 place-items: center;
-                border-radius: 0.7rem;
+                border-radius: 8px;
                 color: white !important;
-                background: linear-gradient(145deg, #5274ed, #3156d9);
-                box-shadow: 0 8px 22px rgba(49, 86, 217, 0.35);
+                background: #2563eb;
+                box-shadow: 0 8px 20px rgba(37, 99, 235, 0.25);
                 font-weight: 750;
             }
 
@@ -102,7 +103,7 @@ def apply_app_styles() -> None:
                 color: white !important;
                 font-size: 1rem;
                 font-weight: 680;
-                letter-spacing: -0.01em;
+                letter-spacing: 0;
             }
 
             .app-brand__tagline {
@@ -112,7 +113,7 @@ def apply_app_styles() -> None:
             }
 
             .page-header {
-                margin-bottom: 1.75rem;
+                margin-bottom: 1.25rem;
                 max-width: 760px;
             }
 
@@ -120,14 +121,14 @@ def apply_app_styles() -> None:
                 color: var(--brand);
                 font-size: 0.77rem;
                 font-weight: 720;
-                letter-spacing: 0.025em;
+                letter-spacing: 0;
                 margin-bottom: 0.55rem;
             }
 
             .page-header h1 {
                 color: var(--ink);
                 font-size: clamp(2.15rem, 4vw, 3.15rem);
-                letter-spacing: -0.045em;
+                letter-spacing: 0;
                 line-height: 1.05;
                 margin: 0;
             }
@@ -141,20 +142,20 @@ def apply_app_styles() -> None:
 
             h2, h3 {
                 color: var(--ink);
-                letter-spacing: -0.025em;
+                letter-spacing: 0;
             }
 
             [data-testid="stVerticalBlockBorderWrapper"] {
                 background: var(--panel);
                 border: 1px solid var(--line);
-                border-radius: 1rem;
-                box-shadow: 0 10px 35px rgba(27, 45, 74, 0.045);
+                border-radius: 8px;
+                box-shadow: 0 8px 24px rgba(20, 32, 48, 0.05);
             }
 
             [data-testid="stMetric"] {
                 background: var(--panel);
                 border: 1px solid var(--line);
-                border-radius: 0.9rem;
+                border-radius: 8px;
                 padding: 0.9rem 1rem;
             }
 
@@ -168,20 +169,24 @@ def apply_app_styles() -> None:
             [data-baseweb="select"] > div {
                 background: #fbfcfe;
                 border-color: #d6dfeb;
-                border-radius: 0.65rem;
+                border-radius: 8px;
             }
 
             [data-testid="stFileUploaderDropzone"] {
-                background: #f8faff;
+                background: #f9fbfd;
                 border-color: #cdd8e7;
-                border-radius: 0.75rem;
+                border-radius: 8px;
                 padding: 0.8rem;
             }
 
             [data-testid^="stBaseButton-primary"] {
-                background: linear-gradient(135deg, var(--brand), var(--brand-dark));
+                background: var(--brand);
                 border: 0;
-                box-shadow: 0 8px 20px rgba(49, 86, 217, 0.2);
+                box-shadow: 0 8px 18px rgba(37, 99, 235, 0.18);
+            }
+
+            [data-testid^="stBaseButton-primary"]:hover {
+                background: var(--brand-dark);
             }
 
             [data-testid="stBaseButton-secondary"] {
@@ -190,8 +195,118 @@ def apply_app_styles() -> None:
 
             [data-testid="stDataFrame"] {
                 border: 1px solid var(--line);
-                border-radius: 0.8rem;
+                border-radius: 8px;
                 overflow: hidden;
+            }
+
+            .workflow-map {
+                background: #ffffff;
+                border: 1px solid var(--line);
+                border-radius: 8px;
+                display: grid;
+                gap: 0;
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+                margin: 0 0 1.25rem;
+                overflow: hidden;
+            }
+
+            .workflow-map__item {
+                display: grid;
+                gap: 0.65rem;
+                grid-template-columns: 2rem 1fr;
+                min-height: 7.4rem;
+                padding: 0.95rem;
+                position: relative;
+            }
+
+            .workflow-map__item + .workflow-map__item {
+                border-left: 1px solid var(--line);
+            }
+
+            .workflow-map__marker {
+                align-items: center;
+                background: #eef2f7;
+                border: 1px solid #d9e2ed;
+                border-radius: 50%;
+                color: #46566b;
+                display: flex;
+                font-size: 0.8rem;
+                font-weight: 760;
+                height: 2rem;
+                justify-content: center;
+                width: 2rem;
+            }
+
+            .workflow-map__item--active {
+                background: #eff6ff;
+            }
+
+            .workflow-map__item--active .workflow-map__marker {
+                background: var(--brand);
+                border-color: var(--brand);
+                color: #ffffff;
+            }
+
+            .workflow-map__item--complete .workflow-map__marker {
+                background: #e7f7f1;
+                border-color: #b7e3d2;
+                color: #087255;
+            }
+
+            .workflow-map__short {
+                color: var(--muted);
+                font-size: 0.72rem;
+                font-weight: 730;
+                letter-spacing: 0;
+                margin-bottom: 0.18rem;
+                text-transform: uppercase;
+            }
+
+            .workflow-map__title {
+                color: var(--ink);
+                font-size: 0.95rem;
+                font-weight: 720;
+                line-height: 1.25;
+            }
+
+            .workflow-map__copy {
+                color: var(--muted);
+                font-size: 0.8rem;
+                line-height: 1.45;
+                margin-top: 0.25rem;
+            }
+
+            .file-guide {
+                display: grid;
+                gap: 0.6rem;
+                margin-top: 0.4rem;
+            }
+
+            .file-guide__item {
+                background: #f8fafc;
+                border: 1px solid #dce4ee;
+                border-radius: 8px;
+                padding: 0.72rem 0.8rem;
+            }
+
+            .file-guide__name {
+                color: var(--ink);
+                font-size: 0.9rem;
+                font-weight: 720;
+            }
+
+            .file-guide__format {
+                color: var(--brand);
+                font-size: 0.78rem;
+                font-weight: 730;
+                margin-top: 0.12rem;
+            }
+
+            .file-guide__copy {
+                color: var(--muted);
+                font-size: 0.78rem;
+                line-height: 1.45;
+                margin-top: 0.28rem;
             }
 
             .workflow-step {
@@ -231,7 +346,7 @@ def apply_app_styles() -> None:
                 color: #91a1b8 !important;
                 font-size: 0.7rem;
                 font-weight: 700;
-                letter-spacing: 0.025em;
+                letter-spacing: 0;
                 margin: 1rem 0 0.55rem;
             }
 
@@ -266,20 +381,33 @@ def apply_app_styles() -> None:
             }
 
             .empty-state {
-                background: rgba(255, 255, 255, 0.74);
+                background: #ffffff;
                 border: 1px dashed #cbd6e5;
-                border-radius: 1rem;
+                border-radius: 8px;
                 color: var(--muted);
                 padding: 2rem;
-                text-align: center;
+                text-align: left;
+            }
+
+            .empty-state__title {
+                color: var(--ink);
+                font-size: 1.05rem;
+                font-weight: 740;
+                margin-bottom: 0.35rem;
+            }
+
+            .empty-state__copy {
+                color: var(--muted);
+                font-size: 0.9rem;
+                line-height: 1.55;
             }
 
             .review-gate {
                 align-items: center;
-                background: linear-gradient(135deg, #eef2ff, #f8faff);
+                background: #fff8eb;
                 border: 1px solid #cbd6ff;
-                border-left: 5px solid var(--brand);
-                border-radius: 0.95rem;
+                border-left: 5px solid var(--gold);
+                border-radius: 8px;
                 display: flex;
                 gap: 0.85rem;
                 margin: -0.25rem 0 1.5rem;
@@ -288,7 +416,7 @@ def apply_app_styles() -> None:
 
             .review-gate__icon {
                 align-items: center;
-                background: var(--brand);
+                background: var(--gold);
                 border-radius: 50%;
                 color: white;
                 display: flex;
@@ -356,9 +484,9 @@ def apply_app_styles() -> None:
             .fit-card,
             .score-card,
             .swap-card {
-                background: rgba(255, 255, 255, 0.94);
+                background: #ffffff;
                 border: 1px solid var(--line);
-                border-radius: 0.9rem;
+                border-radius: 8px;
                 margin-bottom: 0.8rem;
                 padding: 1rem;
             }
@@ -410,7 +538,7 @@ def apply_app_styles() -> None:
                 color: var(--muted);
                 font-size: 0.68rem;
                 font-weight: 760;
-                letter-spacing: 0.04em;
+                letter-spacing: 0;
                 margin-bottom: 0.38rem;
                 text-transform: uppercase;
             }
@@ -439,7 +567,7 @@ def apply_app_styles() -> None:
             }
 
             .skill-group {
-                border-radius: 0.8rem;
+                border-radius: 8px;
                 min-height: 8rem;
                 padding: 0.85rem;
             }
@@ -481,7 +609,7 @@ def apply_app_styles() -> None:
 
             .score-component {
                 background: #f7f9fc;
-                border-radius: 0.65rem;
+                border-radius: 8px;
                 padding: 0.65rem;
             }
 
@@ -501,22 +629,30 @@ def apply_app_styles() -> None:
             }
 
             .upload-validation {
+                background: #f8fafc;
+                border: 1px solid #e0e7f0;
+                border-radius: 8px;
                 font-size: 0.78rem;
-                margin: -0.45rem 0 0.75rem;
+                margin: -0.35rem 0 0.9rem;
+                padding: 0.4rem 0.55rem;
             }
 
             .upload-validation--ok {
+                background: #edfdf6;
+                border-color: #bfe7d8;
                 color: #087255;
             }
 
             .upload-validation--error {
+                background: #fff7ed;
+                border-color: #fed7aa;
                 color: #a33a3a;
             }
 
             .preview-shell {
                 background: #edf1f6;
                 border: 1px solid var(--line);
-                border-radius: 0.8rem;
+                border-radius: 8px;
                 overflow: hidden;
             }
 
@@ -543,8 +679,18 @@ def apply_app_styles() -> None:
 
                 .diff-grid,
                 .skill-groups,
-                .score-components {
+                .score-components,
+                .workflow-map {
                     grid-template-columns: 1fr;
+                }
+
+                .workflow-map__item {
+                    min-height: auto;
+                }
+
+                .workflow-map__item + .workflow-map__item {
+                    border-left: 0;
+                    border-top: 1px solid var(--line);
                 }
             }
         </style>

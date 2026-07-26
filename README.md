@@ -126,6 +126,51 @@ Open the URL printed by Streamlit, normally:
 http://localhost:8501
 ```
 
+## Using the UI
+
+The app is organized as a four-step workspace. Use the sidebar to move between
+steps at any time.
+
+### 1. Set up your job search
+
+Upload the four required files:
+
+* **Job listings:** a `.csv` file with the jobs you want to compare.
+* **Preferences:** a `.yaml` file with your target roles, locations, salary, and
+  exclusions.
+* **Resume:** a `.tex` LaTeX resume that the app can tailor.
+* **Portfolio:** a `.txt` file with your projects and skills.
+
+The page checks each file before enabling **Start search**. If a file is missing
+or in the wrong format, the message under that uploader explains what to fix.
+
+### 2. Run progress
+
+After you start the search, this page shows where the workflow is:
+
+* **Best matches:** the strongest ranked jobs and why they scored well.
+* **Decisions:** a short summary of workflow choices.
+* **Activity log:** the tools that ran and what they produced.
+* **Filtered out:** jobs removed from the search, grouped by reason.
+
+### 3. Review tailored resumes
+
+When draft resumes are ready, the app pauses for you. For each selected role,
+you can:
+
+* preview the original and tailored resume;
+* read why the role is a fit;
+* see what changed in the resume;
+* approve the draft or request changes.
+
+Add feedback when you request changes. Cover letters are generated only after
+the resume drafts are approved.
+
+### 4. Application package
+
+Use this page to download the final files. You can download all final outputs at
+once, or select one role and download its tailored resume and cover letter.
+
 ## Application Workflow
 
 The graph performs initialization, then asks the configured chat model to select
@@ -259,6 +304,21 @@ Run the test suite:
 ```bash
 pytest -q
 ```
+
+Run the production E2E evidence path with live model tool selection and
+connected Langfuse tracing:
+
+```bash
+python scripts/run_production_e2e.py --run-id run-production-e2e-manual
+```
+
+This command intentionally does not fall back to the deterministic offline
+selector. It requires `LLM_MODEL`, `DEEPINFRA_API_KEY`,
+`LANGFUSE_PUBLIC_KEY`, and `LANGFUSE_SECRET_KEY`; when any are missing it exits
+with a JSON report naming the exact missing variables. A successful run compiles
+`data/resume.pdf` from `data/resume.tex`, seeds a conflicting old memory fact,
+runs the graph with `DeepInfraToolSelectionModel` and `TraceManager()`, and
+writes `live_e2e_summary.json` in the run output directory.
 
 ## Outputs
 

@@ -12,7 +12,6 @@ from src.agent.graph import build_agent_graph, validate_artifact_output
 from src.agent.state import AgentState, Phase, RunStatus, create_initial_state
 from src.agent.tool_selection import (
     DeepInfraToolSelectionModel,
-    DeterministicToolSelectionModel,
     ModelToolCall,
     validate_model_tool_call,
 )
@@ -77,7 +76,6 @@ __all__ = [
     "DEFAULT_PROFILE_PATH",
     "DEFAULT_RESUME_PATH",
     "DeepInfraToolSelectionModel",
-    "DeterministicToolSelectionModel",
     "EvidenceClaim",
     "EvidenceItem",
     "ExperienceRequirement",

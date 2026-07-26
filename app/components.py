@@ -48,6 +48,44 @@ STATUS_LABELS = {
     "FAILED": "Needs attention",
 }
 
+PHASE_ORDER = [
+    "INITIALIZE",
+    "FILTER",
+    "SCORE",
+    "FIT_ANALYSIS",
+    "TAILOR",
+    "HUMAN_REVIEW",
+    "COVER_LETTERS",
+    "COMPLETE",
+]
+
+WORKFLOW_STEPS = [
+    (
+        "Prepare",
+        "Upload files",
+        "Add the job list, preferences, resume, and portfolio.",
+        "INITIALIZE",
+    ),
+    (
+        "Rank",
+        "Find best matches",
+        "Filter weak fits and score the strongest opportunities.",
+        "SCORE",
+    ),
+    (
+        "Review",
+        "Check drafts",
+        "Compare each tailored resume before final documents are made.",
+        "HUMAN_REVIEW",
+    ),
+    (
+        "Download",
+        "Use final files",
+        "Save the approved resumes and cover letters.",
+        "COMPLETE",
+    ),
+]
+
 
 def render_sidebar_brand() -> None:
     """Render the product identity above the page navigation."""
@@ -86,6 +124,97 @@ def render_page_header(eyebrow: str, title: str, description: str) -> None:
             <p>{escape(description)}</p>
         </div>
         """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_workflow_overview(current_phase: str | None = None) -> None:
+    """Render a plain-language map of the application flow."""
+
+    phase = current_phase or "INITIALIZE"
+    active_index = _workflow_step_index(phase)
+    step_html: list[str] = []
+    for index, (short_label, title, description, _) in enumerate(WORKFLOW_STEPS):
+        if index < active_index:
+            state = "complete"
+            marker = "✓"
+        elif index == active_index:
+            state = "active"
+            marker = str(index + 1)
+        else:
+            state = "pending"
+            marker = str(index + 1)
+        step_html.append(
+            f"""
+            <div class="workflow-map__item workflow-map__item--{state}">
+                <div class="workflow-map__marker">{escape(marker)}</div>
+                <div>
+                    <div class="workflow-map__short">{escape(short_label)}</div>
+                    <div class="workflow-map__title">{escape(title)}</div>
+                    <div class="workflow-map__copy">{escape(description)}</div>
+                </div>
+            </div>
+            """
+        )
+    st.markdown(
+        '<div class="workflow-map">' + "".join(step_html) + "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def _workflow_step_index(phase: str | None) -> int:
+    if phase in {"FILTER", "SCORE", "FIT_ANALYSIS"}:
+        return 1
+    if phase in {"TAILOR", "HUMAN_REVIEW"}:
+        return 2
+    if phase in {"COVER_LETTERS", "COMPLETE"}:
+        return 3
+    return 0
+
+
+def render_friendly_empty_state(title: str, description: str) -> None:
+    """Render an empty state with a readable title and next-step copy."""
+
+    st.markdown(
+        f"""
+        <div class="empty-state">
+            <div class="empty-state__title">{escape(title)}</div>
+            <div class="empty-state__copy">{escape(description)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_input_file_guide() -> None:
+    """Show the four required inputs in a scannable checklist."""
+
+    items = [
+        (
+            "Job listings",
+            ".csv",
+            "One row per role with title, company, skills, and description.",
+        ),
+        (
+            "Preferences",
+            ".yaml",
+            "Target titles, locations, salary needs, and exclusions.",
+        ),
+        ("Resume", ".tex", "A compilable LaTeX resume that can be tailored."),
+        ("Portfolio", ".txt", "Project notes and technologies, separated clearly."),
+    ]
+    item_html = "".join(
+        f"""
+        <div class="file-guide__item">
+            <div class="file-guide__name">{escape(name)}</div>
+            <div class="file-guide__format">{escape(file_format)}</div>
+            <div class="file-guide__copy">{escape(copy)}</div>
+        </div>
+        """
+        for name, file_format, copy in items
+    )
+    st.markdown(
+        f'<div class="file-guide">{item_html}</div>',
         unsafe_allow_html=True,
     )
 

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -13,7 +15,7 @@ from pydantic.types import SecretStr
 from src.agent.errors import ToolExecutionError
 from src.config import get_config
 from src.domain import StrictBaseModel
-from src.tools.registry import get_tool, get_tool_definitions
+from src.tools.registry import get_tool_definitions
 from src.tracing.langfuse import TraceManager
 
 
@@ -26,73 +28,21 @@ class ModelToolCall(StrictBaseModel):
 
 
 class ToolSelectionModel(Protocol):
-    """Protocol implemented by live and deterministic tool-selecting models."""
+    """Protocol implemented by the live tool-selecting model."""
 
     model_name: str
 
     def select_tool(
         self,
         *,
-        phase: str,
-        allowed_tools: Sequence[str],
-        prepared_arguments: Mapping[str, Any],
+        available_tools: Sequence[str],
         tool_definitions: Sequence[dict[str, Any]],
         state_summary: Mapping[str, Any],
         tracer: TraceManager,
-        previous_errors: Sequence[str] = (),
+        previous_validation_results: Sequence[Mapping[str, Any]] = (),
     ) -> ModelToolCall:
         """Return exactly one structured tool call."""
         ...
-
-
-@dataclass
-class DeterministicToolSelectionModel:
-    """Offline selector for tests and local deterministic runs."""
-
-    model_name: str = "deterministic-tool-selector"
-    scripted_calls: list[ModelToolCall | Mapping[str, Any]] | None = None
-
-    def select_tool(
-        self,
-        *,
-        phase: str,
-        allowed_tools: Sequence[str],
-        prepared_arguments: Mapping[str, Any],
-        tool_definitions: Sequence[dict[str, Any]],
-        state_summary: Mapping[str, Any],
-        tracer: TraceManager,
-        previous_errors: Sequence[str] = (),
-    ) -> ModelToolCall:
-        del tool_definitions, state_summary
-        if self.scripted_calls:
-            raw_call = self.scripted_calls.pop(0)
-            call = ModelToolCall.model_validate(raw_call)
-        else:
-            if len(allowed_tools) != 1:
-                raise ToolExecutionError(
-                    "Deterministic tool selection requires exactly one legal tool."
-                )
-            name = allowed_tools[0]
-            call = ModelToolCall(
-                name=name,
-                arguments=_jsonable(prepared_arguments[name]),
-                rationale="Selected the only legal next registered tool.",
-            )
-        tracer.record_generation(
-            {
-                "purpose": "orchestration_tool_selection",
-                "phase": phase,
-                "allowed_tools": list(allowed_tools),
-                "previous_errors": list(previous_errors),
-            },
-            name="orchestration.model_decision",
-            model=self.model_name,
-            messages={"prepared_tool_names": list(prepared_arguments)},
-            response=call.model_dump(mode="json"),
-            usage={},
-            model_parameters={"temperature": 0, "mock": True},
-        )
-        return call
 
 
 @dataclass
@@ -105,59 +55,49 @@ class DeepInfraToolSelectionModel:
     def select_tool(
         self,
         *,
-        phase: str,
-        allowed_tools: Sequence[str],
-        prepared_arguments: Mapping[str, Any],
+        available_tools: Sequence[str],
         tool_definitions: Sequence[dict[str, Any]],
         state_summary: Mapping[str, Any],
         tracer: TraceManager,
-        previous_errors: Sequence[str] = (),
+        previous_validation_results: Sequence[Mapping[str, Any]] = (),
     ) -> ModelToolCall:
         from langchain_openai import ChatOpenAI
 
         config = get_config()
-        if not config.llm_model or not config.deepinfra_api_key:
-            raise ToolExecutionError(
-                "Live tool selection requires LLM_MODEL and DEEPINFRA_API_KEY."
-            )
+        if not config.llm_model and not self.configured_model_name:
+            raise ToolExecutionError("Live tool selection requires LLM_MODEL.")
+        if not config.deepinfra_api_key:
+            raise ToolExecutionError("Live tool selection requires DEEPINFRA_API_KEY.")
         model_name = self.configured_model_name or config.llm_model
-        tool_schemas = [
-            {
-                "type": "function",
-                "function": {
-                    "name": definition["name"],
-                    "description": definition["description"],
-                    "parameters": definition["parameters"],
-                },
-            }
-            for definition in tool_definitions
-            if definition["name"] in set(allowed_tools)
-        ]
+        public_tools = _selection_tool_definitions(tool_definitions, available_tools)
         llm = ChatOpenAI(
             model=model_name,
             api_key=SecretStr(config.deepinfra_api_key),
             base_url=config.deepinfra_base_url,
             temperature=0,
-        ).bind_tools(tool_schemas)
+            timeout=_request_timeout_seconds(),
+            max_retries=1,
+        ).bind_tools(public_tools)
         messages = [
             (
                 "system",
-                "You are the job-search workflow controller. Select exactly one "
-                "registered tool by emitting one tool call. Use only the supplied "
-                "arguments for that tool. Do not invent scores or artifact paths.",
+                "You are the single job-search workflow agent. Inspect the "
+                "repository state and choose exactly one callable tool for the "
+                "next useful action. All registered tools are visible; workflow "
+                "order is enforced by validators after your choice. For "
+                "job-specific tools, include the target job_id. Return a concise "
+                "rationale in the rationale argument. Do not invent scores, "
+                "artifact paths, evidence, or resume content.",
             ),
             (
                 "human",
                 json.dumps(
                     {
-                        "phase": phase,
-                        "allowed_tools": list(allowed_tools),
                         "state_summary": state_summary,
-                        "prepared_arguments": {
-                            name: _jsonable(prepared_arguments[name])
-                            for name in allowed_tools
-                        },
-                        "previous_errors": list(previous_errors),
+                        "available_tools": list(available_tools),
+                        "previous_validation_results": list(
+                            previous_validation_results
+                        ),
                     },
                     ensure_ascii=False,
                     default=str,
@@ -168,7 +108,7 @@ class DeepInfraToolSelectionModel:
             response = llm.invoke(messages)
         except Exception as exc:
             tracer.record_generation(
-                {"purpose": "orchestration_tool_selection", "phase": phase},
+                {"purpose": "orchestration_tool_selection"},
                 name="orchestration.model_decision",
                 model=model_name,
                 messages=messages,
@@ -178,102 +118,131 @@ class DeepInfraToolSelectionModel:
                 model_parameters={
                     "temperature": 0,
                     "base_url": config.deepinfra_base_url,
+                    "available_tools": list(available_tools),
                 },
             )
             raise
-        raw_calls = getattr(response, "tool_calls", None) or []
+        content = str(getattr(response, "content", "") or "")
+        tool_calls = list(getattr(response, "tool_calls", []) or [])
         tracer.record_generation(
             {
                 "purpose": "orchestration_tool_selection",
-                "phase": phase,
-                "allowed_tools": list(allowed_tools),
+                "available_tools": list(available_tools),
             },
             name="orchestration.model_decision",
             model=model_name,
             messages=messages,
-            response={
-                "content": getattr(response, "content", ""),
-                "tool_calls": _jsonable(raw_calls),
-            },
+            response={"content": content, "tool_calls": _jsonable(tool_calls)},
             usage=_usage(response),
             model_parameters={"temperature": 0, "base_url": config.deepinfra_base_url},
         )
-        if len(raw_calls) != 1:
+        if len(tool_calls) != 1:
+            if content.strip():
+                return _parse_selection_json(content)
             raise ToolExecutionError(
-                f"Model must emit exactly one tool call; received {len(raw_calls)}."
+                f"Model must select exactly one tool; received {len(tool_calls)}."
             )
-        return _parse_langchain_tool_call(raw_calls[0])
+        call = _parse_langchain_tool_call(tool_calls[0])
+        rationale = str(call.arguments.pop("rationale", "") or content)
+        return ModelToolCall(
+            name=call.name,
+            arguments=call.arguments,
+            rationale=rationale.strip(),
+        )
 
 
 def default_tool_selection_model() -> ToolSelectionModel:
-    """Use live selection when configured, otherwise an offline deterministic selector."""
+    """Return the live model-backed selector used by the workflow agent."""
 
-    config = get_config()
-    if config.llm_model and config.deepinfra_api_key:
-        return DeepInfraToolSelectionModel()
-    return DeterministicToolSelectionModel()
-
-
-def select_validated_tool_call(
-    model: ToolSelectionModel,
-    *,
-    phase: str,
-    expected_tool: str,
-    prepared_arguments: Mapping[str, Any],
-    state_summary: Mapping[str, Any],
-    tracer: TraceManager,
-    max_invalid_calls: int = 2,
-) -> ModelToolCall:
-    """Ask the model for a legal call and validate it before execution."""
-
-    allowed_tools = [expected_tool]
-    definitions = get_tool_definitions()
-    errors: list[str] = []
-    for _attempt in range(max_invalid_calls + 1):
-        call = model.select_tool(
-            phase=phase,
-            allowed_tools=allowed_tools,
-            prepared_arguments=prepared_arguments,
-            tool_definitions=definitions,
-            state_summary=state_summary,
-            tracer=tracer,
-            previous_errors=errors,
-        )
-        try:
-            validate_model_tool_call(call, expected_tool=expected_tool)
-            return call
-        except ToolExecutionError as exc:
-            errors.append(str(exc))
-    raise ToolExecutionError(
-        "Model produced repeated invalid tool calls: " + "; ".join(errors)
-    )
+    return DeepInfraToolSelectionModel()
 
 
 def validate_model_tool_call(
     call: ModelToolCall | Mapping[str, Any],
     *,
-    expected_tool: str,
+    available_tools: Sequence[str] | None = None,
 ) -> ModelToolCall:
-    """Reject unknown tools, illegal ordering, and malformed arguments."""
+    """Reject unknown tools and malformed selector arguments.
+
+    Workflow order is intentionally not checked here; graph guardrails validate
+    the selected call against state after the model has made a real choice.
+    """
 
     try:
         parsed = ModelToolCall.model_validate(call)
     except ValidationError as exc:
         raise ToolExecutionError(f"Malformed model tool call: {exc}") from exc
-    if parsed.name != expected_tool:
-        known_tool_names = {definition["name"] for definition in get_tool_definitions()}
-        if parsed.name not in known_tool_names:
-            raise ToolExecutionError(f"Model selected unknown tool: {parsed.name}")
+    known_tool_names = {definition["name"] for definition in get_tool_definitions()}
+    if parsed.name not in known_tool_names:
+        raise ToolExecutionError(f"Model selected unknown tool: {parsed.name}")
+    if available_tools is not None and parsed.name not in set(available_tools):
         raise ToolExecutionError(
-            f"Illegal tool order: expected {expected_tool}, received {parsed.name}."
+            f"Model selected unavailable tool {parsed.name!r}; "
+            f"available={list(available_tools)}."
         )
-    try:
-        get_tool(parsed.name).input_model.model_validate(parsed.arguments)
-    except ValidationError as exc:
-        raise ToolExecutionError(
-            f"Malformed arguments for selected tool {parsed.name}: {exc}"
-        ) from exc
+    _validate_selector_arguments(parsed)
     return parsed
+
+
+def _validate_selector_arguments(call: ModelToolCall) -> None:
+    if not isinstance(call.arguments, dict):
+        raise ToolExecutionError(
+            f"Arguments for selected tool {call.name} must be a JSON object."
+        )
+    extra_keys = set(call.arguments) - {"job_id", "rationale"}
+    if extra_keys:
+        raise ToolExecutionError(
+            f"Selector arguments for {call.name} may only include job_id and "
+            f"rationale; received {sorted(extra_keys)}."
+        )
+
+
+def _selection_tool_definitions(
+    tool_definitions: Sequence[dict[str, Any]],
+    available_tools: Sequence[str],
+) -> list[dict[str, Any]]:
+    available = set(available_tools)
+    definitions = []
+    for definition in tool_definitions:
+        if definition["name"] not in available:
+            continue
+        definitions.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": definition["name"],
+                    "description": (
+                        definition["description"]
+                        + " The workflow assembles full typed arguments from "
+                        "validated repository state after selection."
+                    ),
+                    "parameters": _selector_schema_for(definition["name"]),
+                },
+            }
+        )
+    return definitions
+
+
+def _selector_schema_for(tool_name: str) -> dict[str, Any]:
+    properties: dict[str, Any] = {
+        "rationale": {
+            "type": "string",
+            "description": "Brief reason this is the right next tool.",
+        }
+    }
+    required = ["rationale"]
+    if tool_name in {"fit_analysis", "resume_tailoring", "cover_letter"}:
+        properties["job_id"] = {
+            "type": "string",
+            "description": "The target job_id from the current top-three set.",
+        }
+        required.append("job_id")
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": properties,
+        "required": required,
+    }
 
 
 def _parse_langchain_tool_call(raw_call: Any) -> ModelToolCall:
@@ -317,12 +286,43 @@ def _usage(message: Any) -> dict[str, int]:
     return normalized
 
 
+def _request_timeout_seconds() -> float:
+    raw = os.getenv("LLM_REQUEST_TIMEOUT_SECONDS", "45")
+    try:
+        return max(5.0, float(raw))
+    except ValueError:
+        return 45.0
+
+
+def _parse_selection_json(content: str) -> ModelToolCall:
+    """Parse compact JSON fallback when a chat model returns text."""
+
+    text = content.strip()
+    fenced = re.search(r"```(?:json)?\s*(.*?)```", text, re.DOTALL | re.IGNORECASE)
+    if fenced:
+        text = fenced.group(1).strip()
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ToolExecutionError(
+            "Model did not return valid JSON tool selection."
+        ) from exc
+    if not isinstance(payload, dict):
+        raise ToolExecutionError("Model tool selection JSON must be an object.")
+    arguments = dict(payload.get("arguments") or {})
+    if payload.get("job_id"):
+        arguments.setdefault("job_id", payload["job_id"])
+    return ModelToolCall(
+        name=str(payload.get("name", "")),
+        arguments=arguments,
+        rationale=str(payload.get("rationale", "")),
+    )
+
+
 __all__ = [
     "DeepInfraToolSelectionModel",
-    "DeterministicToolSelectionModel",
     "ModelToolCall",
     "ToolSelectionModel",
     "default_tool_selection_model",
-    "select_validated_tool_call",
     "validate_model_tool_call",
 ]

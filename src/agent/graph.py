@@ -6,6 +6,7 @@ You are the only LLM agent in this workflow.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -16,9 +17,10 @@ from pydantic import BaseModel
 from src.agent.errors import ToolExecutionError
 from src.agent.state import AgentState, Phase, RunStatus, state_value
 from src.agent.tool_selection import (
+    ModelToolCall,
     ToolSelectionModel,
     default_tool_selection_model,
-    select_validated_tool_call,
+    validate_model_tool_call,
 )
 from src.config import (
     MAX_REVISION_ROUNDS,
@@ -64,9 +66,13 @@ from src.tools.resume_tailoring.contracts import (
     TailorResumeInput,
     TailorResumeOutput,
 )
-from src.tools.registry import get_tool, invoke_tool
+from src.tools.registry import (
+    get_registered_tools,
+    get_tool,
+    get_tool_definitions,
+    invoke_tool,
+)
 from src.tracing.langfuse import TraceManager
-from src.tools.registry import get_registered_tools
 from src.utils.output_validation import write_and_validate_outputs
 
 logger = logging.getLogger(__name__)
@@ -181,134 +187,33 @@ def build_agent_graph(
         }
 
     def run_pre_review_tools(state: AgentState) -> AgentState:
-        """Run filtering, scoring, fit analysis, and resume tailoring in order."""
+        """Let the agent iterate until the human-review gate is ready."""
 
-        profile = CandidateProfile.model_validate(
-            state_value(state, "candidate_profile")
-        )
-        jobs = [Job.model_validate(job) for job in state_value(state, "jobs")]
-        portfolio = Portfolio.model_validate(state_value(state, "portfolio"))
-        candidate_evidence = _candidate_evidence(state, profile, portfolio)
-        history = list(state.get("tool_history", []))
-        decisions = list(state.get("agent_decisions", []))
-        run_id = state_value(state, "run_id")
-
-        filtering_input = FilterJobsInput(
-            jobs=jobs,
-            preferences=profile.preferences,
-        )
-        filtering, decision = _select_and_invoke_required_tool(
+        working: AgentState = {
+            **state,
+            "tool_history": list(state.get("tool_history", [])),
+            "agent_decisions": list(state.get("agent_decisions", [])),
+            "errors": list(state.get("errors", [])),
+        }
+        _run_agent_loop(
             selector,
-            state,
-            "filtering",
-            filtering_input,
+            working,
             tracer=trace_manager,
-            output_type=FilterJobsOutput,
+            stop_condition=_ready_for_human_review,
         )
-        decisions.append(decision)
-        history.append(_history(get_tool("filtering").callable_name, filtering))
-        if len(filtering.accepted_jobs) < 3:
-            raise ToolExecutionError(
-                "Filtering must accept at least three jobs before scoring."
-            )
-
-        scoring_input = ScoreJobsInput(
-            jobs=filtering.accepted_jobs,
-            candidate_profile=profile,
-            resume_evidence=profile.resume_evidence,
-            master_skill_evidence=profile.master_skill_evidence,
-            portfolio_evidence=[
-                *portfolio.evidence_items,
-                *profile.portfolio_evidence,
-            ],
-            memory_evidence=_memory_evidence(state),
-        )
-        scoring, decision = _select_and_invoke_required_tool(
-            selector,
-            state,
-            "scoring",
-            scoring_input,
-            tracer=trace_manager,
-            output_type=ScoreJobsOutput,
-        )
-        decisions.append(decision)
-        history.append(_history(get_tool("scoring").callable_name, scoring))
-        if len(scoring.top_3_job_ids) != 3:
-            raise ToolExecutionError("Scoring must select exactly three jobs.")
-
-        jobs_by_id = {job.job_id: job for job in jobs}
-        analyses: dict[str, dict[str, Any]] = {}
-        analysis_artifacts: dict[str, dict[str, str]] = {}
-        for job_id in scoring.top_3_job_ids:
-            job = jobs_by_id[job_id]
-            fit_input = AnalyzeFitInput(
-                job=job,
-                candidate_profile=profile,
-                evidence_items=candidate_evidence,
-                job_evidence=build_job_evidence(job),
-                current_resume_projects=profile.resume_projects,
-                portfolio_projects=portfolio.projects,
-            )
-            fit, decision = _select_and_invoke_required_tool(
-                selector,
-                state,
-                "fit_analysis",
-                fit_input,
-                tracer=trace_manager,
-                output_type=FitAnalysisOutput,
-            )
-            decisions.append(decision)
-            analyses[job_id] = fit.model_dump()
-            history.append(_history(get_tool("fit_analysis").callable_name, fit))
-            markdown_path, json_path = write_fit_analysis(
-                fit,
-                job,
-                run_id=run_id,
-                source_labels=build_source_labels(fit_input),
-            )
-            analysis_artifacts[job_id] = {
-                "markdown_path": str(markdown_path),
-                "json_path": str(json_path),
-            }
-
-        tailoring: dict[str, dict[str, Any]] = {}
-        for job_id in scoring.top_3_job_ids:
-            job = jobs_by_id[job_id]
-            resume_input = TailorResumeInput(
-                job=job,
-                fit_analysis=FitAnalysisOutput.model_validate(analyses[job_id]),
-                source_resume_tex_path=state_value(state, "resume_path"),
-                candidate_evidence=candidate_evidence,
-                job_evidence=build_job_evidence(job),
-                run_id=run_id,
-            )
-            resume, decision = _select_and_invoke_required_tool(
-                selector,
-                state,
-                "resume_tailoring",
-                resume_input,
-                tracer=trace_manager,
-                output_type=TailorResumeOutput,
-            )
-            decisions.append(decision)
-            validate_artifact_output(get_tool("resume_tailoring").callable_name, resume)
-            tailoring[job_id] = resume.model_dump()
-            history.append(_history(get_tool("resume_tailoring").callable_name, resume))
 
         return {
             "phase": Phase.HUMAN_REVIEW.value,
             "status": RunStatus.WAITING_FOR_REVIEW.value,
-            "filtered_jobs": [job.model_dump() for job in filtering.accepted_jobs],
-            "rejected_jobs": [
-                rejected.model_dump() for rejected in filtering.rejected_jobs
-            ],
-            "ranked_jobs": [job.model_dump() for job in scoring.ranked_jobs],
-            "top_3_job_ids": scoring.top_3_job_ids,
-            "fit_analyses": analyses,
-            "fit_analysis_artifacts": analysis_artifacts,
-            "tailoring_results": tailoring,
-            "tool_history": history,
-            "agent_decisions": decisions,
+            "filtered_jobs": working.get("filtered_jobs", []),
+            "rejected_jobs": working.get("rejected_jobs", []),
+            "ranked_jobs": working.get("ranked_jobs", []),
+            "top_3_job_ids": working.get("top_3_job_ids", []),
+            "fit_analyses": working.get("fit_analyses", {}),
+            "fit_analysis_artifacts": working.get("fit_analysis_artifacts", {}),
+            "tailoring_results": working.get("tailoring_results", {}),
+            "tool_history": working.get("tool_history", []),
+            "agent_decisions": working.get("agent_decisions", []),
         }
 
     def human_review(state: AgentState) -> AgentState:
@@ -333,7 +238,7 @@ def build_agent_graph(
         }
 
     def run_post_review_tools(state: AgentState) -> AgentState:
-        """Apply reviewed revisions, then generate cover letters."""
+        """Let the same agent iterate after the single human-review pause."""
 
         top_job_ids = list(state_value(state, "top_3_job_ids"))
         feedback = normalize_review_feedback(
@@ -352,141 +257,30 @@ def build_agent_graph(
         memory_facts, new_fact_ids, memory_failures = _store_review_memory(
             state, decisions, tracer=trace_manager
         )
-        state_with_memory: AgentState = {
+        working: AgentState = {
             **state,
+            "phase": Phase.TAILOR.value if rejected else Phase.COVER_LETTERS.value,
+            "status": RunStatus.RUNNING.value,
             "memory_facts": memory_facts,
+            "new_memory_fact_ids": new_fact_ids,
+            "memory_validation_failures": memory_failures,
+            "review_decisions": decisions,
+            "approved_job_ids": top_job_ids,
+            "pending_revision_job_ids": rejected,
+            "revision_round_job_ids": rejected,
+            "tool_history": list(state.get("tool_history", [])),
+            "agent_decisions": list(state.get("agent_decisions", [])),
+            "review_actions": {},
+            "revision_round_logs": {},
         }
-        profile = CandidateProfile.model_validate(
-            state_value(state, "candidate_profile")
+        _run_agent_loop(
+            selector,
+            working,
+            tracer=trace_manager,
+            stop_condition=_post_review_done,
         )
-        portfolio = Portfolio.model_validate(state_value(state, "portfolio"))
-        candidate_evidence = _candidate_evidence(state_with_memory, profile, portfolio)
-        run_id = state_value(state, "run_id")
-        jobs = {
-            item["job_id"]: Job.model_validate(item)
-            for item in state_value(state, "jobs")
-        }
-        analyses = dict(state_value(state, "fit_analyses"))
-        tailoring = dict(state_value(state, "tailoring_results"))
-        history = list(state.get("tool_history", []))
-        decisions_history = list(state.get("agent_decisions", []))
-        actions: dict[str, dict[str, Any]] = {}
-        revision_round_logs: dict[int, dict[str, Any]] = {}
-
-        for job_id in rejected:
-            feedback_text = decisions[job_id]["comment"]
-            latest = tailoring[job_id]
-            revision_round = 0
-            for revision_round in range(1, MAX_REVISION_ROUNDS + 1):
-                resume_input = TailorResumeInput(
-                    job=jobs[job_id],
-                    fit_analysis=FitAnalysisOutput.model_validate(analyses[job_id]),
-                    source_resume_tex_path=state_value(state, "resume_path"),
-                    candidate_evidence=candidate_evidence,
-                    job_evidence=build_job_evidence(jobs[job_id]),
-                    revision_feedback=feedback_text,
-                    run_id=run_id,
-                )
-                revised, decision = _select_and_invoke_required_tool(
-                    selector,
-                    state,
-                    "resume_tailoring",
-                    resume_input,
-                    tracer=trace_manager,
-                    output_type=TailorResumeOutput,
-                )
-                decisions_history.append(decision)
-                validate_artifact_output(
-                    get_tool("resume_tailoring").callable_name, revised
-                )
-                latest = revised.model_dump()
-                history.append(
-                    _history(get_tool("resume_tailoring").callable_name, revised)
-                )
-                round_log = revision_round_logs.setdefault(
-                    revision_round,
-                    {
-                        "review_round": 1,
-                        "revision_round": revision_round,
-                        "feedback_received_by_job": {},
-                        "actions": [],
-                    },
-                )
-                round_log["feedback_received_by_job"][job_id] = feedback_text
-                round_log["actions"].append(
-                    _revision_attempt_log(
-                        job_id=job_id,
-                        revision_round=revision_round,
-                        feedback_text=feedback_text,
-                        output=revised,
-                    )
-                )
-                if revised.revision_feedback_satisfied is True:
-                    break
-            tailoring[job_id] = latest
-            actions[job_id] = {
-                "revision_round": revision_round,
-                "status": latest["status"],
-                "change_log": latest["change_log"],
-                "output_tex_path": latest["output_tex_path"],
-                "output_pdf_path": latest["output_pdf_path"],
-            }
-            if latest.get("revision_feedback_satisfied") is not True:
-                review_history = [
-                    {
-                        "review_round": 1,
-                        "decisions": decisions,
-                        "rejected_job_ids": rejected,
-                        "memory_writes": [
-                            fact
-                            for fact in memory_facts
-                            if fact["fact_id"] in set(new_fact_ids)
-                        ],
-                        "actions_taken": actions,
-                        "revision_rounds": list(revision_round_logs.values()),
-                    }
-                ]
-                return {
-                    "phase": Phase.HUMAN_REVIEW.value,
-                    "status": RunStatus.FAILED_REVIEW.value,
-                    "tailoring_results": tailoring,
-                    "tool_history": history,
-                    "agent_decisions": decisions_history,
-                    "review_history": review_history,
-                    "errors": [
-                        *state.get("errors", []),
-                        {
-                            "phase": Phase.HUMAN_REVIEW.value,
-                            "type": "FailedReview",
-                            "message": (
-                                f"Feedback for {job_id} remained unsatisfied after "
-                                f"{MAX_REVISION_ROUNDS} revision rounds."
-                            ),
-                        },
-                    ],
-                }
-
-        cover_letters: dict[str, dict[str, Any]] = {}
-        for job_id in top_job_ids:
-            cover_input = GenerateCoverLetterInput(
-                job=jobs[job_id],
-                approved_resume_path=tailoring[job_id]["output_pdf_path"],
-                candidate_evidence=candidate_evidence,
-                job_evidence=build_job_evidence(jobs[job_id]),
-                run_id=run_id,
-            )
-            letter, decision = _select_and_invoke_required_tool(
-                selector,
-                state,
-                "cover_letter",
-                cover_input,
-                tracer=trace_manager,
-                output_type=GenerateCoverLetterOutput,
-            )
-            decisions_history.append(decision)
-            validate_artifact_output(get_tool("cover_letter").callable_name, letter)
-            cover_letters[job_id] = letter.model_dump()
-            history.append(_history(get_tool("cover_letter").callable_name, letter))
+        review_actions = dict(working.get("review_actions", {}))
+        revision_round_logs = dict(working.get("revision_round_logs", {}))
 
         review_history = [
             {
@@ -498,21 +292,35 @@ def build_agent_graph(
                     for fact in memory_facts
                     if fact["fact_id"] in set(new_fact_ids)
                 ],
-                "actions_taken": actions,
+                "actions_taken": review_actions,
                 "revision_rounds": list(revision_round_logs.values()),
             }
         ]
+        if working.get("status") == RunStatus.FAILED_REVIEW.value:
+            return {
+                "phase": Phase.HUMAN_REVIEW.value,
+                "status": RunStatus.FAILED_REVIEW.value,
+                "tailoring_results": working.get("tailoring_results", {}),
+                "tool_history": working.get("tool_history", []),
+                "agent_decisions": working.get("agent_decisions", []),
+                "review_history": review_history,
+                "errors": working.get("errors", []),
+                "memory_facts": memory_facts,
+                "new_memory_fact_ids": new_fact_ids,
+                "memory_validation_failures": memory_failures,
+            }
+
         final_payload = {
             **state,
             "review_decisions": decisions,
             "approved_job_ids": top_job_ids,
-            "tailoring_results": tailoring,
-            "cover_letter_results": cover_letters,
+            "tailoring_results": working.get("tailoring_results", {}),
+            "cover_letter_results": working.get("cover_letter_results", {}),
             "fit_analysis_artifacts": state.get("fit_analysis_artifacts", {}),
             "top_3_job_ids": top_job_ids,
             "jobs": state.get("jobs", []),
             "review_history": review_history,
-            "agent_decisions": decisions_history,
+            "agent_decisions": working.get("agent_decisions", []),
             "trace_events": [event.__dict__ for event in trace_manager.events],
         }
         output_manifest = write_and_validate_outputs(final_payload)
@@ -530,17 +338,17 @@ def build_agent_graph(
             "review_decisions": decisions,
             "approved_job_ids": top_job_ids,
             "revision_round": max(
-                (action["revision_round"] for action in actions.values()),
+                (action["revision_round"] for action in review_actions.values()),
                 default=0,
             ),
-            "tailoring_results": tailoring,
-            "cover_letter_results": cover_letters,
+            "tailoring_results": working.get("tailoring_results", {}),
+            "cover_letter_results": working.get("cover_letter_results", {}),
             "memory_facts": memory_facts,
             "new_memory_fact_ids": new_fact_ids,
             "memory_validation_failures": memory_failures,
             "review_history": review_history,
-            "tool_history": history,
-            "agent_decisions": decisions_history,
+            "tool_history": working.get("tool_history", []),
+            "agent_decisions": working.get("agent_decisions", []),
             "output_manifest": output_manifest,
             "trace_url": trace_manager.trace_url,
             "langfuse_status": trace_manager.status_message,
@@ -558,53 +366,136 @@ def build_agent_graph(
     return graph.compile(checkpointer=checkpointer)
 
 
-def _invoke_required_tool(
-    tool_name: str,
-    arguments: BaseModel,
-    *,
-    tracer: TraceManager,
-    output_type: type[BaseModel],
-) -> Any:
-    result = invoke_tool(tool_name, arguments, context={"tracer": tracer})
-    if isinstance(result, output_type):
-        return result
-    return output_type.model_validate(result)
-
-
-def _select_and_invoke_required_tool(
+def _run_agent_loop(
     selector: ToolSelectionModel,
     state: AgentState,
-    tool_name: str,
+    *,
+    tracer: TraceManager,
+    stop_condition: Callable[[AgentState], bool],
+    max_iterations: int = 30,
+    max_invalid_calls: int = 3,
+) -> None:
+    """Run the single agent's iterative decide-validate-dispatch loop."""
+
+    invalid_results: list[dict[str, Any]] = []
+    for _iteration in range(max_iterations):
+        if stop_condition(state):
+            return
+        current_summary = _decision_state_summary(state)
+        decision_phase = state.get("phase")
+        span_id = tracer.start_span(
+            "orchestration.agent_decision",
+            metadata={"phase": decision_phase},
+            input={
+                "current_state": current_summary,
+                "available_tools": _tool_definition_summary(),
+                "previous_validation_results": invalid_results,
+            },
+        )
+        call: ModelToolCall | None = None
+        try:
+            call = selector.select_tool(
+                available_tools=_available_tool_names(),
+                tool_definitions=get_tool_definitions(),
+                state_summary=current_summary,
+                tracer=tracer,
+                previous_validation_results=invalid_results,
+            )
+            validation = _validate_and_prepare_call(call, state)
+            if not validation["valid"]:
+                decision = _decision_record(
+                    call,
+                    state,
+                    validation,
+                    phase=decision_phase,
+                )
+                state.setdefault("agent_decisions", []).append(decision)
+                invalid_results.append(validation)
+                tracer.end_span(
+                    span_id,
+                    output={
+                        "selected_tool": call.name,
+                        "arguments": call.arguments,
+                        "decision_rationale": call.rationale,
+                        "result": validation,
+                    },
+                )
+                if len(invalid_results) >= max_invalid_calls:
+                    raise ToolExecutionError(
+                        "Model produced repeated invalid tool choices: "
+                        + "; ".join(item["message"] for item in invalid_results)
+                    )
+                continue
+            result = _dispatch_validated_call(
+                call,
+                validation["registry_arguments"],
+                tracer=tracer,
+            )
+            _apply_tool_result(state, call, result, validation["registry_arguments"])
+            result_summary = {
+                **validation,
+                "tool_result": _tool_result_summary(result),
+            }
+            decision = _decision_record(
+                call,
+                state,
+                result_summary,
+                phase=decision_phase,
+            )
+            state.setdefault("agent_decisions", []).append(decision)
+            tracer.end_span(
+                span_id,
+                output={
+                    "selected_tool": call.name,
+                    "arguments": _jsonable(validation["registry_arguments"]),
+                    "selector_arguments": call.arguments,
+                    "decision_rationale": call.rationale,
+                    "result": result_summary,
+                },
+            )
+            invalid_results = []
+        except Exception as exc:
+            tracer.end_span(
+                span_id,
+                status="ERROR",
+                error_type=exc.__class__.__name__,
+                output={
+                    "selected_tool": call.name if call else None,
+                    "arguments": call.arguments if call else {},
+                    "decision_rationale": call.rationale if call else "",
+                    "result": {
+                        "valid": False,
+                        "message": str(exc),
+                        "error_type": exc.__class__.__name__,
+                    },
+                },
+            )
+            raise
+    raise ToolExecutionError(
+        f"Agent loop exceeded {max_iterations} iterations without reaching "
+        f"the stop condition."
+    )
+
+
+def _dispatch_validated_call(
+    call: ModelToolCall,
     arguments: BaseModel,
     *,
     tracer: TraceManager,
-    output_type: type[BaseModel],
-) -> tuple[Any, dict[str, Any]]:
-    call = select_validated_tool_call(
-        selector,
-        phase=state.get("phase", "UNKNOWN"),
-        expected_tool=tool_name,
-        prepared_arguments={tool_name: arguments},
-        state_summary=_decision_state_summary(state),
-        tracer=tracer,
-    )
+) -> BaseModel:
     span_id = tracer.start_span(
         "orchestration.dispatch_validated_call",
         {
             "selected_tool": call.name,
-            "expected_tool": tool_name,
-            "job_id": _argument_job_id(call.arguments),
+            "job_id": _argument_job_id(arguments),
         },
         input={
             "tool_name": call.name,
-            "argument_keys": sorted(call.arguments),
+            "argument_keys": sorted(arguments.model_dump()),
         },
     )
     try:
-        parsed_arguments = get_tool(call.name).input_model.model_validate(
-            call.arguments
-        )
-        result = invoke_tool(call.name, parsed_arguments, context={"tracer": tracer})
+        result = invoke_tool(call.name, arguments, context={"tracer": tracer})
     except Exception as exc:
         tracer.end_span(
             span_id,
@@ -613,32 +504,471 @@ def _select_and_invoke_required_tool(
             output={"error": str(exc)},
         )
         raise
-    tracer.end_span(
-        span_id,
-        output={"output_type": type(result).__name__},
-    )
-    if not isinstance(result, output_type):
-        result = output_type.model_validate(result)
-    return result, {
-        "phase": state.get("phase"),
-        "selected_tool": call.name,
-        "expected_tool": tool_name,
-        "job_id": _argument_job_id(call.arguments),
-        "rationale": call.rationale,
-        "argument_keys": sorted(call.arguments),
+    tracer.end_span(span_id, output={"output_type": type(result).__name__})
+    return result
+
+
+def _validate_and_prepare_call(
+    call: ModelToolCall | Mapping[str, Any],
+    state: AgentState,
+) -> dict[str, Any]:
+    try:
+        parsed = validate_model_tool_call(
+            call,
+            available_tools=_available_tool_names(),
+        )
+    except ToolExecutionError as exc:
+        return _invalid_result(str(exc), tool_name=getattr(call, "name", None))
+
+    try:
+        arguments = _registry_arguments_for_call(parsed, state)
+    except ToolExecutionError as exc:
+        return _invalid_result(str(exc), tool_name=parsed.name)
+    return {
+        "valid": True,
+        "message": "Accepted by workflow state validators.",
+        "selected_tool": parsed.name,
+        "job_id": _argument_job_id(arguments),
+        "registry_arguments": arguments,
     }
 
 
+def _registry_arguments_for_call(
+    call: ModelToolCall,
+    state: AgentState,
+) -> BaseModel:
+    tool_name = call.name
+    profile = CandidateProfile.model_validate(state_value(state, "candidate_profile"))
+    portfolio = Portfolio.model_validate(state_value(state, "portfolio"))
+    jobs = [Job.model_validate(job) for job in state_value(state, "jobs")]
+    jobs_by_id = {job.job_id: job for job in jobs}
+    candidate_evidence = _candidate_evidence(state, profile, portfolio)
+    top_job_ids = list(state.get("top_3_job_ids", []))
+
+    if tool_name == "filtering":
+        if state.get("filtered_jobs"):
+            raise ToolExecutionError("filtering has already completed.")
+        return FilterJobsInput(jobs=jobs, preferences=profile.preferences)
+
+    if tool_name == "scoring":
+        if not state.get("filtered_jobs"):
+            raise ToolExecutionError("scoring requires accepted jobs from filtering.")
+        if state.get("ranked_jobs"):
+            raise ToolExecutionError("scoring has already completed.")
+        filtered_jobs = [
+            Job.model_validate(job) for job in state_value(state, "filtered_jobs")
+        ]
+        if len(filtered_jobs) < 3:
+            raise ToolExecutionError(
+                "Filtering must accept at least three jobs before scoring."
+            )
+        return ScoreJobsInput(
+            jobs=filtered_jobs,
+            candidate_profile=profile,
+            resume_evidence=profile.resume_evidence,
+            master_skill_evidence=profile.master_skill_evidence,
+            portfolio_evidence=[*portfolio.evidence_items, *profile.portfolio_evidence],
+            memory_evidence=_memory_evidence(state),
+        )
+
+    if tool_name == "fit_analysis":
+        job_id = _selected_job_id(call)
+        if not top_job_ids:
+            raise ToolExecutionError("fit_analysis requires top_3_job_ids from scoring.")
+        if state.get("tailoring_results"):
+            raise ToolExecutionError(
+                "fit_analysis cannot run after resume tailoring has started."
+            )
+        if job_id not in top_job_ids:
+            raise ToolExecutionError(
+                f"fit_analysis job_id must be one of {top_job_ids}; received {job_id!r}."
+            )
+        if job_id in state.get("fit_analyses", {}):
+            raise ToolExecutionError(f"fit_analysis already completed for {job_id}.")
+        job = jobs_by_id[job_id]
+        return AnalyzeFitInput(
+            job=job,
+            candidate_profile=profile,
+            evidence_items=candidate_evidence,
+            job_evidence=build_job_evidence(job),
+            current_resume_projects=profile.resume_projects,
+            portfolio_projects=portfolio.projects,
+        )
+
+    if tool_name == "resume_tailoring":
+        job_id = _selected_job_id(call)
+        if not top_job_ids:
+            raise ToolExecutionError(
+                "resume_tailoring requires top_3_job_ids from scoring."
+            )
+        if job_id not in top_job_ids:
+            raise ToolExecutionError(
+                f"resume_tailoring job_id must be one of {top_job_ids}; "
+                f"received {job_id!r}."
+            )
+        fit_analyses = state.get("fit_analyses", {})
+        missing_fit = [job_id for job_id in top_job_ids if job_id not in fit_analyses]
+        if missing_fit:
+            raise ToolExecutionError(
+                "resume_tailoring requires fit_analysis for every top job first; "
+                f"missing={missing_fit}."
+            )
+        review_decisions = state.get("review_decisions", {})
+        rejected_job_ids = _rejected_job_ids(state)
+        if not review_decisions:
+            if job_id in state.get("tailoring_results", {}):
+                raise ToolExecutionError(
+                    f"resume_tailoring already completed for {job_id}."
+                )
+            return TailorResumeInput(
+                job=jobs_by_id[job_id],
+                fit_analysis=FitAnalysisOutput.model_validate(fit_analyses[job_id]),
+                source_resume_tex_path=state_value(state, "resume_path"),
+                candidate_evidence=candidate_evidence,
+                job_evidence=build_job_evidence(jobs_by_id[job_id]),
+                run_id=state_value(state, "run_id"),
+            )
+        if job_id not in rejected_job_ids:
+            raise ToolExecutionError(
+                "After review, resume_tailoring is only valid for rejected "
+                f"jobs needing revision; rejected={rejected_job_ids}."
+            )
+        attempts = _revision_attempts(state, job_id)
+        latest = state.get("tailoring_results", {}).get(job_id, {})
+        if latest.get("revision_feedback_satisfied") is True:
+            raise ToolExecutionError(f"Revision feedback is already satisfied for {job_id}.")
+        if attempts >= MAX_REVISION_ROUNDS:
+            raise ToolExecutionError(
+                f"Maximum revision rounds exceeded for {job_id}: "
+                f"{MAX_REVISION_ROUNDS}."
+            )
+        feedback_text = str(review_decisions[job_id].get("comment", ""))
+        return TailorResumeInput(
+            job=jobs_by_id[job_id],
+            fit_analysis=FitAnalysisOutput.model_validate(fit_analyses[job_id]),
+            source_resume_tex_path=state_value(state, "resume_path"),
+            candidate_evidence=candidate_evidence,
+            job_evidence=build_job_evidence(jobs_by_id[job_id]),
+            revision_feedback=feedback_text,
+            run_id=state_value(state, "run_id"),
+        )
+
+    if tool_name == "cover_letter":
+        job_id = _selected_job_id(call)
+        if not state.get("review_decisions"):
+            raise ToolExecutionError(
+                "cover_letter cannot run before the human review approval gate."
+            )
+        if _pending_revision_job_ids(state):
+            raise ToolExecutionError(
+                "cover_letter cannot run while rejected resumes still need revision."
+            )
+        if job_id not in state.get("approved_job_ids", []):
+            raise ToolExecutionError(
+                f"cover_letter job_id must be approved; received {job_id!r}."
+            )
+        if job_id in state.get("cover_letter_results", {}):
+            raise ToolExecutionError(f"cover_letter already completed for {job_id}.")
+        tailoring = state_value(state, "tailoring_results")
+        return GenerateCoverLetterInput(
+            job=jobs_by_id[job_id],
+            approved_resume_path=tailoring[job_id]["output_pdf_path"],
+            candidate_evidence=candidate_evidence,
+            job_evidence=build_job_evidence(jobs_by_id[job_id]),
+            run_id=state_value(state, "run_id"),
+        )
+
+    raise ToolExecutionError(f"No state validator exists for tool {tool_name}.")
+
+
+def _apply_tool_result(
+    state: AgentState,
+    call: ModelToolCall,
+    result: BaseModel,
+    arguments: BaseModel,
+) -> None:
+    tool = get_tool(call.name)
+    state.setdefault("tool_history", []).append(_history(tool.callable_name, result))
+    if call.name == "filtering":
+        output = FilterJobsOutput.model_validate(result)
+        state["filtered_jobs"] = [job.model_dump() for job in output.accepted_jobs]
+        state["rejected_jobs"] = [
+            rejected.model_dump() for rejected in output.rejected_jobs
+        ]
+        state["phase"] = Phase.SCORE.value
+        if len(output.accepted_jobs) < 3:
+            raise ToolExecutionError(
+                "Filtering must accept at least three jobs before scoring."
+            )
+        return
+    if call.name == "scoring":
+        output = ScoreJobsOutput.model_validate(result)
+        if len(output.top_3_job_ids) != 3:
+            raise ToolExecutionError("Scoring must select exactly three jobs.")
+        state["ranked_jobs"] = [job.model_dump() for job in output.ranked_jobs]
+        state["top_3_job_ids"] = output.top_3_job_ids
+        state["phase"] = Phase.FIT_ANALYSIS.value
+        return
+    if call.name == "fit_analysis":
+        output = FitAnalysisOutput.model_validate(result)
+        state.setdefault("fit_analyses", {})[output.job_id] = output.model_dump()
+        markdown_path, json_path = write_fit_analysis(
+            output,
+            Job.model_validate(getattr(arguments, "job")),
+            run_id=state_value(state, "run_id"),
+            source_labels=build_source_labels(AnalyzeFitInput.model_validate(arguments)),
+        )
+        state.setdefault("fit_analysis_artifacts", {})[output.job_id] = {
+            "markdown_path": str(markdown_path),
+            "json_path": str(json_path),
+        }
+        if _all_top_jobs_have(state, "fit_analyses"):
+            state["phase"] = Phase.TAILOR.value
+        return
+    if call.name == "resume_tailoring":
+        output = TailorResumeOutput.model_validate(result)
+        validate_artifact_output(tool.callable_name, output)
+        state.setdefault("tailoring_results", {})[output.job_id] = output.model_dump()
+        if state.get("review_decisions") and output.job_id in _rejected_job_ids(state):
+            _record_revision_result(state, output)
+        elif _ready_for_human_review(state):
+            state["phase"] = Phase.HUMAN_REVIEW.value
+        return
+    if call.name == "cover_letter":
+        output = GenerateCoverLetterOutput.model_validate(result)
+        validate_artifact_output(tool.callable_name, output)
+        state.setdefault("cover_letter_results", {})[output.job_id] = output.model_dump()
+        if _all_top_jobs_have(state, "cover_letter_results"):
+            state["phase"] = Phase.COMPLETE.value
+            state["status"] = RunStatus.COMPLETED.value
+
+
+def _record_revision_result(state: AgentState, output: TailorResumeOutput) -> None:
+    job_id = output.job_id
+    attempts_by_job = dict(state.get("revision_attempts_by_job", {}))
+    revision_round = int(attempts_by_job.get(job_id, 0)) + 1
+    attempts_by_job[job_id] = revision_round
+    state["revision_attempts_by_job"] = attempts_by_job
+    feedback_text = str(state.get("review_decisions", {}).get(job_id, {}).get("comment", ""))
+    round_logs = state.setdefault("revision_round_logs", {})
+    round_log = round_logs.setdefault(
+        revision_round,
+        {
+            "review_round": 1,
+            "revision_round": revision_round,
+            "feedback_received_by_job": {},
+            "actions": [],
+        },
+    )
+    round_log["feedback_received_by_job"][job_id] = feedback_text
+    round_log["actions"].append(
+        _revision_attempt_log(
+            job_id=job_id,
+            revision_round=revision_round,
+            feedback_text=feedback_text,
+            output=output,
+        )
+    )
+    state.setdefault("review_actions", {})[job_id] = {
+        "revision_round": revision_round,
+        "status": output.status,
+        "change_log": [change.model_dump() for change in output.change_log],
+        "output_tex_path": output.output_tex_path,
+        "output_pdf_path": output.output_pdf_path,
+    }
+    if output.revision_feedback_satisfied is True:
+        state["pending_revision_job_ids"] = [
+            item for item in state.get("pending_revision_job_ids", []) if item != job_id
+        ]
+        if not state["pending_revision_job_ids"]:
+            state["phase"] = Phase.COVER_LETTERS.value
+        return
+    if revision_round >= MAX_REVISION_ROUNDS:
+        state["status"] = RunStatus.FAILED_REVIEW.value
+        state["phase"] = Phase.HUMAN_REVIEW.value
+        state.setdefault("errors", []).append(
+            {
+                "phase": Phase.HUMAN_REVIEW.value,
+                "type": "FailedReview",
+                "message": (
+                    f"Feedback for {job_id} remained unsatisfied after "
+                    f"{MAX_REVISION_ROUNDS} revision rounds."
+                ),
+            }
+        )
+
+
+def _ready_for_human_review(state: AgentState) -> bool:
+    return bool(state.get("top_3_job_ids")) and _all_top_jobs_have(
+        state, "tailoring_results"
+    )
+
+
+def _post_review_done(state: AgentState) -> bool:
+    if state.get("status") == RunStatus.FAILED_REVIEW.value:
+        return True
+    return bool(state.get("review_decisions")) and _all_top_jobs_have(
+        state, "cover_letter_results"
+    )
+
+
 def _decision_state_summary(state: AgentState) -> dict[str, Any]:
+    top_job_ids = list(state.get("top_3_job_ids", []))
+    fit_done = sorted(state.get("fit_analyses", {}))
+    tailoring_done = sorted(state.get("tailoring_results", {}))
+    cover_done = sorted(state.get("cover_letter_results", {}))
     return {
         "run_id": state.get("run_id"),
         "phase": state.get("phase"),
         "status": state.get("status"),
+        "job_count": len(state.get("jobs", [])),
         "filtered_job_count": len(state.get("filtered_jobs", [])),
         "ranked_job_count": len(state.get("ranked_jobs", [])),
-        "top_3_job_ids": list(state.get("top_3_job_ids", [])),
-        "review_round": state.get("revision_round", 0),
+        "top_3_job_ids": top_job_ids,
+        "fit_analysis_completed_job_ids": fit_done,
+        "fit_analysis_remaining_job_ids": [
+            job_id for job_id in top_job_ids if job_id not in fit_done
+        ],
+        "tailoring_completed_job_ids": tailoring_done,
+        "tailoring_remaining_job_ids": [
+            job_id for job_id in top_job_ids if job_id not in tailoring_done
+        ],
+        "review_decisions_present": bool(state.get("review_decisions")),
+        "rejected_job_ids": _rejected_job_ids(state),
+        "pending_revision_job_ids": _pending_revision_job_ids(state),
+        "revision_attempts_by_job": dict(state.get("revision_attempts_by_job", {})),
+        "max_revision_rounds": MAX_REVISION_ROUNDS,
+        "cover_letter_completed_job_ids": cover_done,
+        "cover_letter_remaining_job_ids": [
+            job_id for job_id in top_job_ids if job_id not in cover_done
+        ],
     }
+
+
+def _available_tool_names() -> list[str]:
+    return [tool.name for tool in get_registered_tools()]
+
+
+def _tool_definition_summary() -> list[dict[str, str]]:
+    return [
+        {"name": tool.name, "description": tool.description}
+        for tool in get_registered_tools()
+    ]
+
+
+def _invalid_result(message: str, *, tool_name: str | None = None) -> dict[str, Any]:
+    return {
+        "valid": False,
+        "selected_tool": tool_name,
+        "message": message,
+    }
+
+
+def _decision_record(
+    call: ModelToolCall,
+    state: AgentState,
+    result: Mapping[str, Any],
+    *,
+    phase: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "phase": phase if phase is not None else state.get("phase"),
+        "available_tools": _available_tool_names(),
+        "selected_tool": call.name,
+        "arguments": call.arguments,
+        "job_id": result.get("job_id") or call.arguments.get("job_id"),
+        "rationale": call.rationale,
+        "result": _decision_result_summary(result),
+    }
+
+
+def _selected_job_id(call: ModelToolCall) -> str:
+    value = call.arguments.get("job_id")
+    if not value:
+        raise ToolExecutionError(f"{call.name} requires a job_id selector argument.")
+    return str(value)
+
+
+def _all_top_jobs_have(state: AgentState, key: str) -> bool:
+    top_job_ids = list(state.get("top_3_job_ids", []))
+    values = state.get(key, {})
+    return bool(top_job_ids) and all(job_id in values for job_id in top_job_ids)
+
+
+def _rejected_job_ids(state: AgentState) -> list[str]:
+    decisions = state.get("review_decisions", {})
+    return [
+        job_id
+        for job_id, decision in decisions.items()
+        if decision.get("decision") == "reject"
+    ]
+
+
+def _pending_revision_job_ids(state: AgentState) -> list[str]:
+    pending: list[str] = []
+    tailoring = state.get("tailoring_results", {})
+    for job_id in _rejected_job_ids(state):
+        latest = tailoring.get(job_id, {})
+        attempts = _revision_attempts(state, job_id)
+        if latest.get("revision_feedback_satisfied") is True:
+            continue
+        if attempts >= MAX_REVISION_ROUNDS:
+            pending.append(job_id)
+            continue
+        pending.append(job_id)
+    return pending
+
+
+def _revision_attempts(state: AgentState, job_id: str) -> int:
+    return int(state.get("revision_attempts_by_job", {}).get(job_id, 0))
+
+
+def _tool_result_summary(result: BaseModel) -> dict[str, Any]:
+    payload = result.model_dump()
+    summary: dict[str, Any] = {
+        "output_type": type(result).__name__,
+        "status": payload.get("status", "OK"),
+    }
+    if payload.get("job_id"):
+        summary["job_id"] = payload["job_id"]
+    if "top_3_job_ids" in payload:
+        summary["top_3_job_ids"] = payload["top_3_job_ids"]
+    if "accepted_jobs" in payload:
+        summary["accepted_job_count"] = len(payload["accepted_jobs"])
+    if "ranked_jobs" in payload:
+        summary["ranked_job_count"] = len(payload["ranked_jobs"])
+    if "revision_feedback_satisfied" in payload:
+        summary["revision_feedback_satisfied"] = payload[
+            "revision_feedback_satisfied"
+        ]
+    return summary
+
+
+def _decision_result_summary(result: Mapping[str, Any]) -> dict[str, Any]:
+    summary = {
+        key: value
+        for key, value in dict(result).items()
+        if key != "registry_arguments"
+    }
+    arguments = result.get("registry_arguments")
+    if isinstance(arguments, BaseModel):
+        payload = arguments.model_dump(mode="json")
+        summary["registry_argument_summary"] = {
+            "argument_type": type(arguments).__name__,
+            "argument_keys": sorted(payload),
+            "job_id": _argument_job_id(arguments),
+        }
+    return _jsonable(summary)
+
+
+def _jsonable(value: Any) -> Any:
+    if hasattr(value, "model_dump"):
+        return value.model_dump(mode="json")
+    if isinstance(value, Mapping):
+        return {str(key): _jsonable(item) for key, item in value.items()}
+    if isinstance(value, list | tuple):
+        return [_jsonable(item) for item in value]
+    return value
 
 
 def _argument_job_id(arguments: BaseModel | dict[str, Any]) -> str | None:
@@ -704,9 +1034,13 @@ def _store_review_memory(
             for fact in updated
             if fact.active and fact.deduplication_key not in before_keys
         ]
-        conflict_events = [
-            conflict.model_dump() for fact in updated for conflict in fact.conflicts
-        ]
+        conflict_events = list(
+            {
+                conflict.conflict_id: conflict.model_dump()
+                for fact in updated
+                for conflict in fact.conflicts
+            }.values()
+        )
         conflict_span = tracer.start_span(
             "memory.conflict_handling",
             input={

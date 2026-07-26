@@ -13,10 +13,13 @@ from app.components import (
     format_status,
     group_rejected_jobs,
     observability_summary,
+    PHASE_ORDER,
     render_agent_decisions,
     render_artifact_errors,
     render_errors,
     render_fit_analysis,
+    render_friendly_empty_state,
+    render_input_file_guide,
     render_page_header,
     render_pdf_preview,
     render_ranked_job_card,
@@ -26,6 +29,7 @@ from app.components import (
     render_status_pill,
     render_tool_activity,
     render_upload_validation,
+    render_workflow_overview,
     review_status_for_job,
     validate_uploaded_file,
 )
@@ -65,29 +69,40 @@ def render_input_page() -> None:
     render_page_header(
         "Step 1 of 4",
         "Set up your job search",
-        "Upload your job listings, resume, portfolio, and preferences. We will rank the best matches and pause for your approval before creating final documents.",
+        (
+            "Start with the four files the agent needs. The app will rank your "
+            "roles, prepare tailored drafts, then stop for your review before "
+            "making final documents."
+        ),
     )
+    render_workflow_overview("INITIALIZE")
     render_errors(state)
 
     form_column, guide_column = st.columns([1.75, 1], gap="large")
     with form_column:
         with st.container(border=True):
             st.subheader("Input files")
-            st.caption("Upload all four files to start a new search.")
+            st.caption("Each file is checked before the search button turns on.")
 
             jobs_upload = st.file_uploader(
-                "Job listings",
+                "Job listings (.csv)",
                 type=["csv"],
-                help="CSV only. Include one job per row.",
+                help=(
+                    "Use one row per job. The app expects job IDs, titles, "
+                    "companies, descriptions, and requirements."
+                ),
                 key="jobs_upload",
             )
             jobs_valid, jobs_message = validate_uploaded_file(jobs_upload, {".csv"})
             render_upload_validation(jobs_valid, jobs_message)
 
             preferences_upload = st.file_uploader(
-                "Preferences",
+                "Preferences (.yaml)",
                 type=["yaml"],
-                help="YAML only. Define target titles, locations, remote preference, salary, and exclusions.",
+                help=(
+                    "Define target titles, locations, remote preference, salary, "
+                    "and exclusions."
+                ),
                 key="preferences_upload",
             )
             preferences_valid, preferences_message = validate_uploaded_file(
@@ -99,7 +114,7 @@ def render_input_page() -> None:
             left, right = st.columns(2)
             with left:
                 resume_upload = st.file_uploader(
-                    "Resume",
+                    "Resume (.tex)",
                     type=["tex"],
                     help=(
                         "Compilable LaTeX with structurally identifiable summary, "
@@ -114,7 +129,7 @@ def render_input_page() -> None:
                 render_upload_validation(resume_valid, resume_message)
             with right:
                 portfolio_upload = st.file_uploader(
-                    "Portfolio",
+                    "Portfolio (.txt)",
                     type=["txt"],
                     help="Plain-text file only. Separate projects with a blank line.",
                     key="portfolio_upload",
@@ -140,26 +155,7 @@ def render_input_page() -> None:
     with guide_column:
         with st.container(border=True):
             st.subheader("What happens next")
-            st.markdown(
-                """
-                <div class="workflow-step">
-                    <div class="workflow-step__number">1</div>
-                    <div><div class="workflow-step__title">Rank the opportunities</div>
-                    <div class="workflow-step__copy">Filter the job list and identify the three strongest matches.</div></div>
-                </div>
-                <div class="workflow-step">
-                    <div class="workflow-step__number">2</div>
-                    <div><div class="workflow-step__title">Tailor your materials</div>
-                    <div class="workflow-step__copy">Use evidence from your resume and portfolio for each selected role.</div></div>
-                </div>
-                <div class="workflow-step">
-                    <div class="workflow-step__number">3</div>
-                    <div><div class="workflow-step__title">Review before finalizing</div>
-                    <div class="workflow-step__copy">Approve drafts or request focused revisions before cover letters are generated.</div></div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+            render_input_file_guide()
 
         with st.expander("File requirements"):
             st.markdown(
@@ -180,7 +176,7 @@ def render_input_page() -> None:
         if state:
             with st.container(border=True):
                 st.subheader("Saved run")
-                st.caption("A previous run is available from the navigation.")
+                st.caption("You can continue from the latest saved checkpoint.")
                 if st.session_state.get("waiting_for_review"):
                     if st.button(
                         "Open review", type="primary", use_container_width=True
@@ -258,8 +254,12 @@ def render_execution_page() -> None:
     render_page_header(
         "Step 2 of 4",
         "Run progress",
-        "Follow each decision from job filtering through resume generation.",
+        (
+            "Watch the search move from filtering to ranking, fit analysis, "
+            "resume drafting, review, and final files."
+        ),
     )
+    render_workflow_overview(state.get("phase"))
     render_errors(state)
 
     if runtime_error is not None:
@@ -268,30 +268,20 @@ def render_execution_page() -> None:
         )
 
     if not state:
-        st.markdown(
-            '<div class="empty-state">No run has started yet. Set up your input files to begin.</div>',
-            unsafe_allow_html=True,
+        render_friendly_empty_state(
+            "No search has started yet",
+            "Upload the four input files on the setup page, then start a run.",
         )
         if st.button("Set up search", type="primary"):
             st.session_state.__setitem__("active_page", "input")
         st.stop()
 
-    phase_order = [
-        "INITIALIZE",
-        "FILTER",
-        "SCORE",
-        "FIT_ANALYSIS",
-        "TAILOR",
-        "HUMAN_REVIEW",
-        "COVER_LETTERS",
-        "COMPLETE",
-    ]
     phase = state.get("phase", "INITIALIZE")
-    progress = max(0, phase_order.index(phase) if phase in phase_order else 0) / (
-        len(phase_order) - 1
+    progress = max(0, PHASE_ORDER.index(phase) if phase in PHASE_ORDER else 0) / (
+        len(PHASE_ORDER) - 1
     )
     st.progress(progress)
-    st.caption(f"Current phase: {format_phase(phase)}")
+    st.caption(f"Current step: {format_phase(phase)}")
 
     jobs = state.get("jobs", [])
     ranked = state.get("ranked_jobs", [])
@@ -306,14 +296,14 @@ def render_execution_page() -> None:
     rejected = state.get("rejected_jobs", [])
 
     ranked_tab, decisions_tab, activity_tab, filtered_tab = st.tabs(
-        ["Ranked jobs", "Agent decisions", "Tool activity", "Filtered out"]
+        ["Best matches", "Decisions", "Activity log", "Filtered out"]
     )
 
     with ranked_tab:
         if ranked:
             st.caption(
-                "Scores are calculated by deterministic code. Component explanations "
-                "below come directly from the scoring tool."
+                "Scores come from deterministic matching rules. The notes show "
+                "which parts of the job matched your evidence."
             )
             for ranked_item in ranked:
                 render_ranked_job_card(
@@ -321,19 +311,17 @@ def render_execution_page() -> None:
                     state.get("top_3_job_ids", []),
                 )
         else:
-            st.caption("Ranked jobs will appear here as the run progresses.")
+            st.caption("Best matches will appear here as soon as scoring finishes.")
 
     with decisions_tab:
         st.caption(
-            "These are concise controller decisions about what should happen next. "
-            "Deterministic tool results are shown separately."
+            "A short record of the workflow choices made during this run."
         )
         render_agent_decisions(decisions)
 
     with activity_tab:
         st.caption(
-            "Structured execution records show tool inputs and outputs without "
-            "presenting them as LLM reasoning."
+            "A readable log of the tools used by the workflow."
         )
         render_tool_activity(history, state.get("errors", []))
 
@@ -348,8 +336,8 @@ def render_execution_page() -> None:
                     len(jobs_for_reason),
                 )
             st.caption(
-                "Reasons are preserved exactly as returned by the Filtering Tool. "
-                "A role may appear in more than one group."
+                "A role can appear in more than one group when multiple rules "
+                "filtered it out."
             )
             for reason, jobs_for_reason in grouped.items():
                 with st.expander(f"{reason} · {len(jobs_for_reason)}"):
@@ -382,8 +370,12 @@ def render_review_page() -> None:
     render_page_header(
         "Step 3 of 4",
         "Review tailored resumes",
-        "Approve each draft or request a focused revision. Cover letters are created only after every resume is approved.",
+        (
+            "Compare each draft against your original resume, check why changes "
+            "were made, then approve it or request a specific revision."
+        ),
     )
+    render_workflow_overview(state.get("phase") or "HUMAN_REVIEW")
     render_review_gate_banner()
     render_errors(state)
 
@@ -416,9 +408,9 @@ def render_review_page() -> None:
         }
 
     if not resumes:
-        st.markdown(
-            '<div class="empty-state">There are no drafts waiting for review.</div>',
-            unsafe_allow_html=True,
+        render_friendly_empty_state(
+            "No drafts are waiting for review",
+            "Draft resumes will appear here after the ranking and tailoring steps finish.",
         )
         if st.button("View run progress"):
             st.session_state.__setitem__("active_page", "execution")
@@ -440,7 +432,10 @@ def render_review_page() -> None:
     )
 
     if payload and payload.get("is_initial_review", revision_round == 0):
-        st.caption(f"Initial review · up to {max_revision_rounds} revision rounds")
+        st.caption(
+            f"Initial review. Up to {max_revision_rounds} revision rounds are "
+            "available."
+        )
     elif payload:
         st.caption(f"Revision round {revision_round} of {max_revision_rounds}")
     else:
@@ -492,7 +487,7 @@ def render_review_page() -> None:
 
     st.subheader(f"{resume['job_title']} at {resume['company']}")
     preview_tab, fit_tab, changes_tab = st.tabs(
-        ["Document preview", "Fit analysis", "Resume changes"]
+        ["Preview", "Why this role", "What changed"]
     )
 
     with preview_tab:
@@ -557,7 +552,7 @@ def render_review_page() -> None:
                 )
     if controls_locked:
         st.caption(
-            "Review controls are locked because the single review gate has closed."
+            "Review controls are locked because this review step has already closed."
         )
 
     st.divider()
@@ -626,8 +621,9 @@ def render_results_page() -> None:
     render_page_header(
         "Step 4 of 4",
         "Application package",
-        "Download the approved resume and cover letter prepared for each role.",
+        "Download the final resume and cover letter for each approved role.",
     )
+    render_workflow_overview(state.get("phase") or "COMPLETE")
     render_errors(state)
 
     if runtime_error is not None:
@@ -647,7 +643,7 @@ def render_results_page() -> None:
         "",
     )
 
-    st.subheader("Run observability")
+    st.subheader("Run summary")
     summary = observability_summary(
         state, bundle.tracer if bundle is not None else None
     )
@@ -659,7 +655,7 @@ def render_results_page() -> None:
             st.markdown(f"**{summary['trace_status']}**")
             if trace_url:
                 st.link_button(
-                    "Open public run trace",
+                    "Open run trace",
                     trace_url,
                     type="primary",
                     use_container_width=True,
@@ -688,7 +684,7 @@ def render_results_page() -> None:
         )
         if zip_payload:
             st.download_button(
-                "Download all outputs as ZIP",
+                "Download all final files",
                 data=zip_payload,
                 file_name=f"{state.get('run_id') or 'job-search'}-outputs.zip",
                 mime="application/zip",
@@ -728,7 +724,7 @@ def render_results_page() -> None:
                 render_status_pill(status_label, status_tone)
 
             before_tab, resume_tab, letter_tab = st.tabs(
-                ["Before tailoring", "Final resume", "Final cover letter"]
+                ["Original resume", "Final resume", "Final cover letter"]
             )
             with before_tab:
                 render_pdf_preview(source_resume_path, "Resume before tailoring")
@@ -762,9 +758,12 @@ def render_results_page() -> None:
                         "completed the review workflow."
                     )
     else:
-        st.markdown(
-            '<div class="empty-state">Final files will appear here after every resume is approved.</div>',
-            unsafe_allow_html=True,
+        render_friendly_empty_state(
+            "No final files yet",
+            (
+                "Approve the tailored resumes first. The app will generate cover "
+                "letters after review is complete."
+            ),
         )
         if st.button("Open review", type="primary"):
             st.session_state.__setitem__("active_page", "review")

@@ -112,6 +112,90 @@ REQUIRED_TOOL_NAMES = [
 ]
 
 
+class StateChoosingToolSelectionModel:
+    model_name = "state-choosing-test-llm"
+
+    def __init__(self, *, first_call: ModelToolCall | None = None) -> None:
+        self.first_call = first_call
+        self.calls: list[dict[str, object]] = []
+
+    def select_tool(
+        self,
+        *,
+        available_tools,
+        tool_definitions,
+        state_summary,
+        tracer,
+        previous_validation_results=(),
+    ) -> ModelToolCall:
+        del tool_definitions
+        self.calls.append(
+            {
+                "available_tools": list(available_tools),
+                "state_summary": dict(state_summary),
+                "previous_validation_results": list(previous_validation_results),
+            }
+        )
+        if self.first_call is not None:
+            call = self.first_call
+            self.first_call = None
+        else:
+            call = self._choose_from_state(state_summary)
+        tracer.record_generation(
+            {
+                "purpose": "orchestration_tool_selection",
+                "available_tools": list(available_tools),
+            },
+            name="orchestration.model_decision",
+            model=self.model_name,
+            messages={"state_summary": state_summary},
+            response=call.model_dump(mode="json"),
+            model_parameters={"temperature": 0, "test_double": True},
+        )
+        return call
+
+    def _choose_from_state(self, state_summary) -> ModelToolCall:
+        if state_summary["filtered_job_count"] == 0:
+            return ModelToolCall(
+                name="filtering",
+                rationale="No filtered jobs exist yet.",
+            )
+        if state_summary["ranked_job_count"] == 0:
+            return ModelToolCall(
+                name="scoring",
+                rationale="Filtered jobs are ready for deterministic scoring.",
+            )
+        if state_summary["fit_analysis_remaining_job_ids"]:
+            job_id = state_summary["fit_analysis_remaining_job_ids"][0]
+            return ModelToolCall(
+                name="fit_analysis",
+                arguments={"job_id": job_id},
+                rationale="A top job still needs fit analysis.",
+            )
+        if state_summary["tailoring_remaining_job_ids"]:
+            job_id = state_summary["tailoring_remaining_job_ids"][0]
+            return ModelToolCall(
+                name="resume_tailoring",
+                arguments={"job_id": job_id},
+                rationale="Fit analyses are complete; draft this resume.",
+            )
+        if state_summary["pending_revision_job_ids"]:
+            job_id = state_summary["pending_revision_job_ids"][0]
+            return ModelToolCall(
+                name="resume_tailoring",
+                arguments={"job_id": job_id},
+                rationale="Human feedback requires a revision.",
+            )
+        if state_summary["cover_letter_remaining_job_ids"]:
+            job_id = state_summary["cover_letter_remaining_job_ids"][0]
+            return ModelToolCall(
+                name="cover_letter",
+                arguments={"job_id": job_id},
+                rationale="Approved resumes are ready for cover letters.",
+            )
+        raise AssertionError(f"no valid test choice for state: {state_summary}")
+
+
 def test_tool_registry_contains_required_tools_once() -> None:
     tools = get_registered_tools()
 
@@ -203,41 +287,22 @@ def test_llm_style_tool_call_uses_bound_definitions_and_dispatches() -> None:
     assert result.accepted_jobs[0].job_id == "J-fake"
 
 
-def test_model_tool_calls_reject_unknown_illegal_and_malformed_arguments() -> None:
-    valid_filtering = {
-        "jobs": [
-            {
-                "job_id": "J1",
-                "title": "ML Engineer",
-                "company": "Example",
-                "description": "Build models.",
-            }
-        ],
-        "preferences": {},
-    }
-
+def test_model_tool_call_shape_rejects_unknown_and_malformed_arguments() -> None:
     with pytest.raises(ToolExecutionError, match="unknown tool"):
         validate_model_tool_call(
             ModelToolCall(name="not_registered", arguments={}),
-            expected_tool="filtering",
         )
-    with pytest.raises(ToolExecutionError, match="Illegal tool order"):
-        validate_model_tool_call(
-            ModelToolCall(name="scoring", arguments={}),
-            expected_tool="filtering",
-        )
-    with pytest.raises(ToolExecutionError, match="Malformed arguments"):
+    with pytest.raises(ToolExecutionError, match="may only include"):
         validate_model_tool_call(
             ModelToolCall(
                 name="filtering",
-                arguments={**valid_filtering, "model_score": 100},
-            ),
-            expected_tool="filtering",
+                arguments={"model_score": 100},
+            )
         )
 
 
 def test_model_cannot_inject_deterministic_scoring_values() -> None:
-    with pytest.raises(ToolExecutionError, match="Malformed arguments"):
+    with pytest.raises(ToolExecutionError, match="may only include"):
         validate_model_tool_call(
             ModelToolCall(
                 name="scoring",
@@ -246,9 +311,36 @@ def test_model_cannot_inject_deterministic_scoring_values() -> None:
                     "candidate_profile": {},
                     "ranked_jobs": [{"score": 100}],
                 },
-            ),
-            expected_tool="scoring",
+            )
         )
+
+
+def test_different_repository_states_drive_different_model_tool_choices() -> None:
+    selector = StateChoosingToolSelectionModel()
+
+    filtering_call = selector._choose_from_state(
+        {
+            "filtered_job_count": 0,
+            "ranked_job_count": 0,
+            "fit_analysis_remaining_job_ids": [],
+            "tailoring_remaining_job_ids": [],
+            "pending_revision_job_ids": [],
+            "cover_letter_remaining_job_ids": [],
+        }
+    )
+    scoring_call = selector._choose_from_state(
+        {
+            "filtered_job_count": 5,
+            "ranked_job_count": 0,
+            "fit_analysis_remaining_job_ids": [],
+            "tailoring_remaining_job_ids": [],
+            "pending_revision_job_ids": [],
+            "cover_letter_remaining_job_ids": [],
+        }
+    )
+
+    assert filtering_call.name == "filtering"
+    assert scoring_call.name == "scoring"
 
 
 def test_graph_orchestration_dispatches_pre_review_tools_through_registry(
@@ -292,13 +384,17 @@ def test_graph_orchestration_dispatches_pre_review_tools_through_registry(
     monkeypatch.setattr(graph_module, "invoke_tool", fake_invoke_tool)
     monkeypatch.setattr(graph_module, "validate_artifact_output", lambda *_args: None)
 
+    selector = StateChoosingToolSelectionModel()
+    tracer = TraceManager(enabled=False)
     app = build_agent_graph(
         checkpointer=create_memory_checkpointer(),
-        tracer=TraceManager(enabled=False),
+        tracer=tracer,
+        tool_selection_model=selector,
     )
     result = invoke_new_run(app, create_initial_state(thread_id="thread-registry"))
 
     assert result["__interrupt__"]
+    assert all(len(call["available_tools"]) >= 2 for call in selector.calls)
     assert calls == [
         "filtering",
         "scoring",
@@ -309,6 +405,92 @@ def test_graph_orchestration_dispatches_pre_review_tools_through_registry(
         "resume_tailoring",
         "resume_tailoring",
     ]
+    decision_spans = [
+        event for event in tracer.events if event.name == "orchestration.agent_decision"
+    ]
+    assert decision_spans
+    assert all(
+        len(event.input["available_tools"]) == len(REQUIRED_TOOL_NAMES)
+        for event in decision_spans
+    )
+    assert all(event.output["selected_tool"] for event in decision_spans)
+    assert all(event.output["decision_rationale"] for event in decision_spans)
+    generations = [
+        event for event in tracer.events if event.name == "orchestration.model_decision"
+    ]
+    decision_span_ids = {event.observation_id for event in decision_spans}
+    assert generations
+    assert all(event.model == selector.model_name for event in generations)
+    assert all(event.parent_observation_id in decision_span_ids for event in generations)
+
+
+def test_invalid_tool_choice_is_blocked_by_validator_not_hidden(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import src.agent.graph as graph_module
+
+    calls: list[str] = []
+
+    def fake_invoke_tool(name, arguments, context=None):
+        calls.append(name)
+        if name == "filtering":
+            return FilterJobsOutput(accepted_jobs=arguments.jobs, rejected_jobs=[])
+        if name == "scoring":
+            ranked_jobs = [
+                ScoredJob(
+                    job=job,
+                    score=100 - index,
+                    score_breakdown={},
+                    rationale="fake deterministic ranking",
+                    evidence_ids=[],
+                )
+                for index, job in enumerate(arguments.jobs)
+            ]
+            return ScoreJobsOutput(
+                ranked_jobs=ranked_jobs,
+                top_3_job_ids=[job.job_id for job in arguments.jobs[:3]],
+            )
+        if name == "fit_analysis":
+            return FitAnalysisOutput(job_id=arguments.job.job_id)
+        if name == "resume_tailoring":
+            return TailorResumeOutput(
+                job_id=arguments.job.job_id,
+                status="OK",
+                output_tex_path=f"/tmp/{arguments.job.job_id}.tex",
+                output_pdf_path=f"/tmp/{arguments.job.job_id}.pdf",
+                page_count=1,
+            )
+        raise AssertionError(f"unexpected tool dispatch: {name}")
+
+    monkeypatch.setattr(graph_module, "invoke_tool", fake_invoke_tool)
+    monkeypatch.setattr(graph_module, "validate_artifact_output", lambda *_args: None)
+
+    selector = StateChoosingToolSelectionModel(
+        first_call=ModelToolCall(
+            name="cover_letter",
+            arguments={"job_id": "J001"},
+            rationale="Try a cover letter too early.",
+        )
+    )
+    tracer = TraceManager(enabled=False)
+    app = build_agent_graph(
+        checkpointer=create_memory_checkpointer(),
+        tracer=tracer,
+        tool_selection_model=selector,
+    )
+    result = invoke_new_run(app, create_initial_state(thread_id="thread-invalid"))
+
+    assert result["__interrupt__"]
+    assert calls[0] == "filtering"
+    assert "cover_letter" not in calls
+    first_decision = next(
+        event for event in tracer.events if event.name == "orchestration.agent_decision"
+    )
+    assert len(first_decision.input["available_tools"]) == len(REQUIRED_TOOL_NAMES)
+    assert first_decision.output["selected_tool"] == "cover_letter"
+    assert first_decision.output["result"]["valid"] is False
+    assert "human review approval gate" in first_decision.output["result"]["message"]
+    assert selector.calls[1]["previous_validation_results"][0]["valid"] is False
 
 
 # --- test_agent_phase_policy.py ---
@@ -463,9 +645,11 @@ def test_graph_wiring_across_review_memory_revision_and_letters(
         encoding="utf-8",
     )
     tracer = TraceManager(enabled=False)
+    selector = StateChoosingToolSelectionModel()
     app = build_agent_graph(
         checkpointer=create_memory_checkpointer(),
         tracer=tracer,
+        tool_selection_model=selector,
     )
     state = create_initial_state(
         thread_id="thread-e2e",
@@ -738,9 +922,11 @@ def test_real_pdflatex_complete_workflow_with_review_memory_and_revision(
         output_dir / "checkpoints.sqlite"
     )
     try:
+        selector = StateChoosingToolSelectionModel()
         app = build_agent_graph(
             checkpointer=checkpointer,
             tracer=tracer,
+            tool_selection_model=selector,
         )
         state = create_initial_state(
             thread_id="thread-real-pdflatex",

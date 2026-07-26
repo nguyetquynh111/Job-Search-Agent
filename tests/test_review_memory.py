@@ -36,6 +36,7 @@ from src.tracing.langfuse import (
 )
 from src.tracing.langfuse import ROOT_TRACE_NAME, TraceManager
 from tests import preflight
+from tests.test_pipeline import StateChoosingToolSelectionModel
 from typing import Any
 import csv
 import importlib
@@ -876,6 +877,7 @@ def test_tracing_failure_does_not_terminate_agent_workflow(
     app = build_agent_graph(
         checkpointer=create_memory_checkpointer(),
         tracer=tracer,
+        tool_selection_model=StateChoosingToolSelectionModel(),
     )
     state = create_initial_state(
         thread_id="thread-tracing-failure",
