@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import re
 from pathlib import Path
 from typing import Any
 
@@ -33,10 +34,9 @@ class OutputManifest(StrictBaseModel):
 MANDATORY_JOB_FILES = (
     "job_details.json",
     "resume_before.pdf",
-    "resume_after.tex",
     "resume_after.pdf",
-    "cover_letter.tex",
     "cover_letter.pdf",
+    "fit_analysis.json",
     "fit_analysis.md",
     "change_log.json",
     "human_review_decision.json",
@@ -51,6 +51,20 @@ TEMPORARY_LATEX_SUFFIXES = (
     ".synctex.gz",
     ".toc",
 )
+PUBLIC_TEX_PATH_KEYS = {
+    "output_tex_path",
+    "tex_path",
+    "tex_file",
+}
+STALE_PUBLIC_ARTIFACT_NAMES = {
+    "resume_draft.pdf": "resume_after.pdf",
+    "resume_draft.tex": "resume_after.pdf",
+    "approved.pdf": "resume_after.pdf",
+    "approved.tex": "resume_after.pdf",
+    "letter.pdf": "cover_letter.pdf",
+    "letter.tex": "cover_letter.pdf",
+    "cover_letter.tex": "cover_letter.pdf",
+}
 
 
 class OutputValidationError(RuntimeError):
@@ -104,21 +118,15 @@ def write_and_validate_outputs(
             job_dir / "resume_after.pdf",
             label=f"final resume for {job_id}",
         )
-        _copy_artifact(
-            tailoring[job_id].get("output_tex_path"),
-            job_dir / "resume_after.tex",
-            label=f"final resume source for {job_id}",
-        )
+        tailoring[job_id]["output_pdf_path"] = str(job_dir / "resume_after.pdf")
+        tailoring[job_id].pop("output_tex_path", None)
         _copy_artifact(
             letters[job_id].get("output_pdf_path"),
             job_dir / "cover_letter.pdf",
             label=f"cover letter for {job_id}",
         )
-        _copy_artifact(
-            letters[job_id].get("output_tex_path"),
-            job_dir / "cover_letter.tex",
-            label=f"cover letter source for {job_id}",
-        )
+        letters[job_id]["output_pdf_path"] = str(job_dir / "cover_letter.pdf")
+        letters[job_id].pop("output_tex_path", None)
 
         fit_path = Path(
             artifacts.get(job_id, {}).get("markdown_path", job_dir / "fit_analysis.md")
@@ -129,6 +137,9 @@ def write_and_validate_outputs(
                 job_dir / "fit_analysis.md",
                 label=f"fit analysis for {job_id}",
             )
+        artifacts.setdefault(job_id, {})["markdown_path"] = str(
+            job_dir / "fit_analysis.md"
+        )
         fit_json_path = artifacts.get(job_id, {}).get("json_path")
         if fit_json_path:
             _copy_artifact(
@@ -136,9 +147,11 @@ def write_and_validate_outputs(
                 job_dir / "fit_analysis.json",
                 label=f"fit analysis JSON for {job_id}",
             )
+        artifacts.setdefault(job_id, {})["json_path"] = str(job_dir / "fit_analysis.json")
         _write_job_metadata_files(state, job_id, job_dir)
 
         _remove_temporary_latex_files(job_dir)
+        _remove_non_submission_files(job_dir)
         _validate_job_directory(job_dir)
 
     if len(produced_directories) != 3:
@@ -147,9 +160,9 @@ def write_and_validate_outputs(
         )
     manifest = OutputManifest(
         run_id=run_id,
-        output_root=str(root_dir),
+        output_root=_public_path(root_dir),
         job_ids=top_job_ids,
-        job_directories=produced_directories,
+        job_directories=[_public_path(Path(path)) for path in produced_directories],
         mandatory_files_per_job=list(MANDATORY_JOB_FILES),
         trace_id=state.get("trace_id"),
         trace_url=state.get("trace_url"),
@@ -163,23 +176,31 @@ def _write_run_files(
     root_dir: Path,
     manifest: dict[str, Any],
 ) -> None:
+    public_manifest = sanitize_public_artifact_references(manifest)
     (root_dir / "run_manifest.json").write_text(
-        json.dumps(manifest, indent=2, ensure_ascii=False, default=str),
+        json.dumps(public_manifest, indent=2, ensure_ascii=False, default=str),
         encoding="utf-8",
     )
-    trace_events = state.get("trace_events", [])
+    (root_dir / "public_trace_url.txt").write_text(
+        str(manifest.get("trace_url") or manifest.get("trace_id") or ""),
+        encoding="utf-8",
+    )
+    trace_events = sanitize_public_artifact_references(state.get("trace_events", []))
     (root_dir / "trace_events.json").write_text(
         json.dumps(trace_events, indent=2, ensure_ascii=False, default=str),
         encoding="utf-8",
     )
     for filename, key in (
-        ("filtered_jobs.json", "filtered_jobs"),
         ("rejected_jobs.json", "rejected_jobs"),
         ("ranked_jobs.json", "ranked_jobs"),
-        ("review_history.json", "review_history"),
     ):
         (root_dir / filename).write_text(
-            json.dumps(state.get(key, []), indent=2, ensure_ascii=False, default=str),
+            json.dumps(
+                sanitize_public_artifact_references(state.get(key, [])),
+                indent=2,
+                ensure_ascii=False,
+                default=str,
+            ),
             encoding="utf-8",
         )
     memory_file = state.get("memory_file")
@@ -215,6 +236,13 @@ def _remove_temporary_latex_files(job_dir: Path) -> None:
             path.unlink()
 
 
+def _remove_non_submission_files(job_dir: Path) -> None:
+    allowed = set(MANDATORY_JOB_FILES)
+    for path in job_dir.iterdir():
+        if path.is_file() and path.name not in allowed:
+            path.unlink()
+
+
 def _write_job_metadata_files(
     state: dict[str, Any], job_id: str, job_dir: Path
 ) -> None:
@@ -229,7 +257,7 @@ def _write_job_metadata_files(
     ]
     (job_dir / "change_log.json").write_text(
         json.dumps(
-            tailoring.get("change_log", []),
+            sanitize_public_artifact_references(tailoring.get("change_log", [])),
             indent=2,
             ensure_ascii=False,
             default=str,
@@ -237,11 +265,21 @@ def _write_job_metadata_files(
         encoding="utf-8",
     )
     (job_dir / "human_review_decision.json").write_text(
-        json.dumps(review_decision, indent=2, ensure_ascii=False, default=str),
+        json.dumps(
+            sanitize_public_artifact_references(review_decision),
+            indent=2,
+            ensure_ascii=False,
+            default=str,
+        ),
         encoding="utf-8",
     )
     (job_dir / "revision_history.json").write_text(
-        json.dumps(review_history, indent=2, ensure_ascii=False, default=str),
+        json.dumps(
+            sanitize_public_artifact_references(review_history),
+            indent=2,
+            ensure_ascii=False,
+            default=str,
+        ),
         encoding="utf-8",
     )
 
@@ -270,3 +308,48 @@ def _validate_job_directory(job_dir: Path) -> None:
         raise OutputValidationError(
             f"{job_dir.name} contains temporary LaTeX files: {sorted(leftovers)}"
         )
+
+
+def sanitize_public_artifact_references(value: Any) -> Any:
+    """Remove stale/private path references from public submission artifacts."""
+
+    if isinstance(value, dict):
+        safe: dict[str, Any] = {}
+        for key, item in value.items():
+            key_text = str(key)
+            if key_text in PUBLIC_TEX_PATH_KEYS:
+                continue
+            safe[key_text] = sanitize_public_artifact_references(item)
+        return safe
+    if isinstance(value, list):
+        return [sanitize_public_artifact_references(item) for item in value]
+    if isinstance(value, tuple):
+        return [sanitize_public_artifact_references(item) for item in value]
+    if isinstance(value, str):
+        return _sanitize_public_artifact_string(value)
+    return value
+
+
+def _sanitize_public_artifact_string(value: str) -> str:
+    sanitized = value
+    repo_root = Path.cwd().resolve()
+    repo_prefix = str(repo_root) + "/"
+    sanitized = sanitized.replace(repo_prefix, "")
+    for stale, canonical in STALE_PUBLIC_ARTIFACT_NAMES.items():
+        if stale in {"letter.pdf", "letter.tex"}:
+            sanitized = re.sub(rf"(?<!cover_){re.escape(stale)}", canonical, sanitized)
+        else:
+            sanitized = sanitized.replace(stale, canonical)
+    sanitized = re.sub(
+        r"outputs/([^/]+)/source_resume/resume\.pdf",
+        r"outputs/\1/resume_before.pdf",
+        sanitized,
+    )
+    return sanitized
+
+
+def _public_path(path: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(Path.cwd().resolve()))
+    except ValueError:
+        return str(path)

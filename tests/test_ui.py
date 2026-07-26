@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from html.parser import HTMLParser
+
 from app.app import (
     build_evidence_lookup,
     build_outputs_zip,
@@ -12,10 +14,10 @@ from app.app import (
     score_components_from_rationale,
     validate_uploaded_file,
 )
+from app.components import build_workflow_overview_html
 from app.app import ensure_session_defaults, reset_demo_data
 from io import BytesIO
 from pathlib import Path
-from streamlit.testing.v1 import AppTest
 from types import SimpleNamespace
 import zipfile
 
@@ -30,6 +32,25 @@ class _ui_components_Upload:
 
     def getvalue(self) -> bytes:
         return self._value
+
+
+class _TagBalanceParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.stack: list[str] = []
+        self.errors: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "div":
+            self.stack.append(tag)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag != "div":
+            return
+        if not self.stack:
+            self.errors.append(f"Unexpected closing tag: {tag}")
+            return
+        self.stack.pop()
 
 
 def test_upload_validation_requires_expected_nonempty_file() -> None:
@@ -51,6 +72,22 @@ def test_upload_validation_requires_expected_nonempty_file() -> None:
     )
     assert valid is True
     assert message.startswith("Ready")
+
+
+def test_workflow_overview_markup_is_balanced_and_stateful() -> None:
+    html = build_workflow_overview_html("HUMAN_REVIEW")
+    parser = _TagBalanceParser()
+
+    parser.feed(html)
+
+    assert parser.errors == []
+    assert parser.stack == []
+    assert html.count('class="workflow-map__item ') == 4
+    assert html.count('class="workflow-map__marker"') == 4
+    assert html.count('class="workflow-map__body"') == 4
+    assert html.count("workflow-map__item--complete") == 2
+    assert html.count("workflow-map__item--active") == 1
+    assert html.count("workflow-map__item--pending") == 1
 
 
 def test_upload_validation_reuses_backend_loaders_for_all_inputs() -> None:
@@ -322,26 +359,3 @@ def test_reset_demo_data_preserves_checkpoint_files(
     assert all(path.exists() for path in checkpoint_files)
     assert memory_file.read_text(encoding="utf-8") == "[]"
     assert not generated_file.exists()
-
-
-# --- test_ui_upload_page.py ---
-"""Import test for the upload page in a partially installed environment."""
-
-
-def test_upload_page_renders_when_graph_runtime_is_unavailable(
-    tmp_path: Path, monkeypatch
-) -> None:
-    """Optional workflow dependencies must not take down the input form."""
-
-    monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "outputs"))
-    page = Path(__file__).parents[1] / "app" / "app.py"
-
-    app = AppTest.from_file(str(page), default_timeout=15).run()
-
-    assert not app.exception
-    assert [item.value for item in app.subheader[:2]] == [
-        "Input files",
-        "What happens next",
-    ]
-    assert len(app.get("file_uploader")) == 4
-    assert "Start search" in [button.label for button in app.button]

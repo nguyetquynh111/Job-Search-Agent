@@ -186,6 +186,9 @@ cython_debug/
 # Job Search Agent local runtime artifacts
 outputs/*
 !outputs/.gitkeep
+!outputs/submission-final/
+!outputs/submission-final/**
+outputs/submission-final/checkpoints.sqlite
 *.aux
 *.fdb_latexmk
 *.fls

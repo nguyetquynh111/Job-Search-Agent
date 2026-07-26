@@ -219,6 +219,10 @@ def apply_app_styles() -> None:
                 position: relative;
             }
 
+            .workflow-map__body {
+                min-width: 0;
+            }
+
             .workflow-map__item + .workflow-map__item {
                 border-left: 1px solid var(--line);
             }

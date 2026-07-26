@@ -701,6 +701,7 @@ def _sanitize_string(value: str, personal_values: set[str]) -> str:
     sanitized = _PHONE_RE.sub("[REDACTED_PHONE]", sanitized)
     sanitized = _SSN_RE.sub("[REDACTED_SSN]", sanitized)
     sanitized = _SECRET_VALUE_RE.sub("[REDACTED_SECRET]", sanitized)
+    sanitized = _sanitize_public_path_tokens(sanitized)
     for personal in sorted(personal_values, key=len, reverse=True):
         sanitized = re.sub(
             re.escape(personal),
@@ -708,6 +709,27 @@ def _sanitize_string(value: str, personal_values: set[str]) -> str:
             sanitized,
             flags=re.IGNORECASE,
         )
+    return sanitized
+
+
+def _sanitize_public_path_tokens(value: str) -> str:
+    sanitized = value.replace(str(os.getcwd()) + "/", "")
+    replacements = {
+        "resume_draft.pdf": "resume_after.pdf",
+        "resume_draft.tex": "resume_after.pdf",
+        "approved.pdf": "resume_after.pdf",
+        "approved.tex": "resume_after.pdf",
+        "letter.pdf": "cover_letter.pdf",
+        "letter.tex": "cover_letter.pdf",
+        "cover_letter.tex": "cover_letter.pdf",
+    }
+    for stale, canonical in replacements.items():
+        sanitized = sanitized.replace(stale, canonical)
+    sanitized = re.sub(
+        r"outputs/([^/]+)/source_resume/resume\.pdf",
+        r"outputs/\1/resume_before.pdf",
+        sanitized,
+    )
     return sanitized
 
 

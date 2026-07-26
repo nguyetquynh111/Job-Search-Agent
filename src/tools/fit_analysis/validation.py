@@ -24,12 +24,14 @@ import src.tools.fit_analysis.llm as llm
 import src.tools.fit_analysis.swap as swap_module
 from src.utils.skill_matching import canonicalize, category_members, skill_in_text
 from src.tools.fit_analysis.evidence_index import source_kind
+from src.tools.fit_analysis.evidence_index import build_evidence_index
 from src.tools.fit_analysis.prepass import (
     PrePass,
     _dedupe_canonical,
     _seniority_verdict,
     build_project_section,
     build_skill_section,
+    run_prepass,
 )
 from src.utils.job_evidence import (
     build_job_evidence,
@@ -199,7 +201,11 @@ def merge_llm_proposal(
     merged = llm_output.model_copy(
         update={
             **buckets,
+            "relevant_experience": (
+                llm_output.relevant_experience or prepass.experience
+            ),
             "seniority": _merge_seniority(llm_output, inp, prepass, repairs),
+            "education": llm_output.education or prepass.education,
             "project_analysis": project_analysis,
             "project_swap": project_swap,
         }
@@ -423,49 +429,109 @@ def post_validate(
     ):
         seniority_verdict = rules.PARTIAL
 
+    deterministic = run_prepass(inp, build_evidence_index(inp.evidence_items))
+    relevant_experience = _fix_narrative(
+        output.relevant_experience,
+        known_ids,
+        repairs,
+        evidence_by_id=evidence_by_id,
+        label="relevant experience",
+        required_job_id=job_evidence_id(inp.job, "description"),
+    )
+    if not relevant_experience and deterministic.experience:
+        repairs.append("filled relevant_experience from deterministic evidence pass")
+        relevant_experience = _fix_narrative(
+            deterministic.experience,
+            known_ids,
+            repairs,
+            evidence_by_id=evidence_by_id,
+            label="relevant experience",
+            required_job_id=job_evidence_id(inp.job, "description"),
+        )
+
+    seniority = _fix_narrative(
+        output.seniority,
+        known_ids,
+        repairs,
+        evidence_by_id=evidence_by_id,
+        label="seniority",
+        forced=seniority_verdict,
+        allow_profile_fact=True,
+        required_job_id=(
+            job_evidence_id(inp.job, "experience")
+            if job_evidence_id(inp.job, "experience") in job_ids
+            else job_evidence_id(inp.job, "description")
+        ),
+    )
+    if not seniority:
+        repairs.append("filled seniority from deterministic evidence pass")
+        seniority = _fix_narrative(
+            deterministic.seniority,
+            known_ids,
+            repairs,
+            evidence_by_id=evidence_by_id,
+            label="seniority",
+            forced=seniority_verdict,
+            allow_profile_fact=True,
+            required_job_id=(
+                job_evidence_id(inp.job, "experience")
+                if job_evidence_id(inp.job, "experience") in job_ids
+                else job_evidence_id(inp.job, "description")
+            ),
+        )
+
+    education = _fix_narrative(
+        output.education,
+        known_ids,
+        repairs,
+        evidence_by_id=evidence_by_id,
+        label="education",
+        required_job_id=job_evidence_id(inp.job, "description"),
+    )
+    if not education and deterministic.education:
+        repairs.append("filled education from deterministic evidence pass")
+        education = _fix_narrative(
+            deterministic.education,
+            known_ids,
+            repairs,
+            evidence_by_id=evidence_by_id,
+            label="education",
+            required_job_id=job_evidence_id(inp.job, "description"),
+        )
+
+    project_analysis = _fix_project_analysis(
+        output.project_analysis,
+        known_ids,
+        repairs,
+        evidence_by_id,
+        job_evidence_id(inp.job, "description"),
+    )
+    if not project_analysis:
+        fallback_projects, fallback_swap = build_project_section(
+            deterministic.swap,
+            job_evidence_id(inp.job, "description"),
+        )
+        repairs.append("filled project_analysis from deterministic evidence pass")
+        project_analysis = _fix_project_analysis(
+            fallback_projects,
+            known_ids,
+            repairs,
+            evidence_by_id,
+            job_evidence_id(inp.job, "description"),
+        )
+        if output.project_swap is None:
+            output = output.model_copy(update={"project_swap": fallback_swap})
+
     updated = output.model_copy(
         update={
             "job_id": inp.job.job_id,
-            "relevant_experience": _fix_narrative(
-                output.relevant_experience,
-                known_ids,
-                repairs,
-                evidence_by_id=evidence_by_id,
-                label="relevant experience",
-                required_job_id=job_evidence_id(inp.job, "description"),
-            ),
-            "seniority": _fix_narrative(
-                output.seniority,
-                known_ids,
-                repairs,
-                evidence_by_id=evidence_by_id,
-                label="seniority",
-                forced=seniority_verdict,
-                allow_profile_fact=True,
-                required_job_id=(
-                    job_evidence_id(inp.job, "experience")
-                    if job_evidence_id(inp.job, "experience") in job_ids
-                    else job_evidence_id(inp.job, "description")
-                ),
-            ),
-            "education": _fix_narrative(
-                output.education,
-                known_ids,
-                repairs,
-                evidence_by_id=evidence_by_id,
-                label="education",
-                required_job_id=job_evidence_id(inp.job, "description"),
-            ),
+            "relevant_experience": relevant_experience,
+            "seniority": seniority,
+            "education": education,
             "aligned_skills": aligned,
             "evidenced_missing_skills": evidenced_missing,
             "genuine_gaps": genuine_gaps,
-            "project_analysis": _fix_project_analysis(
-                output.project_analysis,
-                known_ids,
-                repairs,
-                evidence_by_id,
-                job_evidence_id(inp.job, "description"),
-            ),
+            "project_analysis": project_analysis,
             "project_swap": _fix_swap(output, inp, repairs, job_evidence),
             "validation_failures": list(
                 dict.fromkeys([*output.validation_failures, *repairs])

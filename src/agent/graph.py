@@ -6,6 +6,7 @@ You are the only LLM agent in this workflow.
 from __future__ import annotations
 
 import logging
+import json
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
@@ -42,6 +43,7 @@ from src.utils.input_loading import (
 )
 from src.utils.job_evidence import build_job_evidence
 from src.utils.latex import pdf_page_count
+from src.utils.evidence_validation import job_evidence_supports_skill
 from src.review.human_review import build_review_payload, normalize_review_feedback
 from src.review.memory import (
     JSONMemoryStore,
@@ -73,7 +75,10 @@ from src.tools.registry import (
     invoke_tool,
 )
 from src.tracing.langfuse import TraceManager
-from src.utils.output_validation import write_and_validate_outputs
+from src.utils.output_validation import (
+    sanitize_public_artifact_references,
+    write_and_validate_outputs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -227,7 +232,7 @@ def build_agent_graph(
         ):
             span_id = trace_manager.start_span(
                 "human_review_pause",
-                input={"job_ids": list(payload.resumes)},
+                input=payload.model_dump(),
             )
             trace_manager.end_span(span_id)
         review_feedback = interrupt(payload.model_dump())
@@ -249,6 +254,28 @@ def build_agent_graph(
             job_id: decision.model_dump()
             for job_id, decision in feedback.decisions.items()
         }
+        review_span = trace_manager.start_span(
+            "human_review_decisions",
+            input={
+                "interrupt_payload": state.get("interrupt_payload", {}),
+                "decisions": decisions,
+            },
+        )
+        trace_manager.end_span(
+            review_span,
+            output={
+                "approved_job_ids": [
+                    job_id
+                    for job_id, decision in decisions.items()
+                    if decision["decision"] == "approve"
+                ],
+                "rejected_job_ids": [
+                    job_id
+                    for job_id, decision in decisions.items()
+                    if decision["decision"] == "reject"
+                ],
+            },
+        )
         rejected = [
             job_id
             for job_id, decision in feedback.decisions.items()
@@ -257,9 +284,25 @@ def build_agent_graph(
         memory_facts, new_fact_ids, memory_failures = _store_review_memory(
             state, decisions, tracer=trace_manager
         )
+        memory_propagation = _plan_memory_propagation(
+            state,
+            decisions,
+            memory_facts,
+            new_fact_ids,
+            tracer=trace_manager,
+        )
+        pending_propagation = [
+            action["job_id"]
+            for action in memory_propagation
+            if action["status"] == "pending_tailoring"
+        ]
         working: AgentState = {
             **state,
-            "phase": Phase.TAILOR.value if rejected else Phase.COVER_LETTERS.value,
+            "phase": (
+                Phase.TAILOR.value
+                if rejected or pending_propagation
+                else Phase.COVER_LETTERS.value
+            ),
             "status": RunStatus.RUNNING.value,
             "memory_facts": memory_facts,
             "new_memory_fact_ids": new_fact_ids,
@@ -267,6 +310,13 @@ def build_agent_graph(
             "review_decisions": decisions,
             "approved_job_ids": top_job_ids,
             "pending_revision_job_ids": rejected,
+            "memory_propagation_job_ids": pending_propagation,
+            "memory_propagation_feedback_by_job": {
+                action["job_id"]: action["feedback"]
+                for action in memory_propagation
+                if action.get("feedback")
+            },
+            "memory_propagation_actions": memory_propagation,
             "revision_round_job_ids": rejected,
             "tool_history": list(state.get("tool_history", [])),
             "agent_decisions": list(state.get("agent_decisions", [])),
@@ -293,6 +343,7 @@ def build_agent_graph(
                     if fact["fact_id"] in set(new_fact_ids)
                 ],
                 "actions_taken": review_actions,
+                "memory_propagation": working.get("memory_propagation_actions", []),
                 "revision_rounds": list(revision_round_logs.values()),
             }
         ]
@@ -321,16 +372,24 @@ def build_agent_graph(
             "jobs": state.get("jobs", []),
             "review_history": review_history,
             "agent_decisions": working.get("agent_decisions", []),
-            "trace_events": [event.__dict__ for event in trace_manager.events],
         }
         output_manifest = write_and_validate_outputs(final_payload)
         trace_manager.update_run(
             metadata={"status": RunStatus.COMPLETED.value},
-            output={
+            output=sanitize_public_artifact_references({
                 "top_3_job_ids": top_job_ids,
                 "output_manifest": output_manifest,
-            },
+                "artifact_paths": _final_artifact_paths(
+                    output_manifest,
+                    working.get("tailoring_results", {}),
+                    working.get("cover_letter_results", {}),
+                ),
+                "cover_letter_results": working.get("cover_letter_results", {}),
+                "review_history": review_history,
+                "memory_propagation": working.get("memory_propagation_actions", []),
+            }),
         )
+        _write_trace_events_snapshot(output_manifest, trace_manager)
         trace_manager.flush()
         return {
             "phase": Phase.COMPLETE.value,
@@ -347,6 +406,9 @@ def build_agent_graph(
             "new_memory_fact_ids": new_fact_ids,
             "memory_validation_failures": memory_failures,
             "review_history": review_history,
+            "memory_propagation_actions": working.get(
+                "memory_propagation_actions", []
+            ),
             "tool_history": working.get("tool_history", []),
             "agent_decisions": working.get("agent_decisions", []),
             "output_manifest": output_manifest,
@@ -629,9 +691,25 @@ def _registry_arguments_for_call(
                 run_id=state_value(state, "run_id"),
             )
         if job_id not in rejected_job_ids:
-            raise ToolExecutionError(
-                "After review, resume_tailoring is only valid for rejected "
-                f"jobs needing revision; rejected={rejected_job_ids}."
+            propagation_ids = _pending_memory_propagation_job_ids(state)
+            if job_id not in propagation_ids:
+                raise ToolExecutionError(
+                    "After review, resume_tailoring is only valid for rejected "
+                    "jobs needing revision or approved jobs with relevant new "
+                    f"memory; rejected={rejected_job_ids}; "
+                    f"memory_propagation={propagation_ids}."
+                )
+            feedback_text = str(
+                state.get("memory_propagation_feedback_by_job", {}).get(job_id, "")
+            )
+            return TailorResumeInput(
+                job=jobs_by_id[job_id],
+                fit_analysis=FitAnalysisOutput.model_validate(fit_analyses[job_id]),
+                source_resume_tex_path=state_value(state, "resume_path"),
+                candidate_evidence=candidate_evidence,
+                job_evidence=build_job_evidence(jobs_by_id[job_id]),
+                revision_feedback=feedback_text,
+                run_id=state_value(state, "run_id"),
             )
         attempts = _revision_attempts(state, job_id)
         latest = state.get("tailoring_results", {}).get(job_id, {})
@@ -642,7 +720,7 @@ def _registry_arguments_for_call(
                 f"Maximum revision rounds exceeded for {job_id}: "
                 f"{MAX_REVISION_ROUNDS}."
             )
-        feedback_text = str(review_decisions[job_id].get("comment", ""))
+        feedback_text = _combined_review_and_memory_feedback(state, job_id)
         return TailorResumeInput(
             job=jobs_by_id[job_id],
             fit_analysis=FitAnalysisOutput.model_validate(fit_analyses[job_id]),
@@ -731,6 +809,8 @@ def _apply_tool_result(
         state.setdefault("tailoring_results", {})[output.job_id] = output.model_dump()
         if state.get("review_decisions") and output.job_id in _rejected_job_ids(state):
             _record_revision_result(state, output)
+        elif output.job_id in state.get("memory_propagation_job_ids", []):
+            _record_memory_propagation_result(state, output)
         elif _ready_for_human_review(state):
             state["phase"] = Phase.HUMAN_REVIEW.value
         return
@@ -776,11 +856,25 @@ def _record_revision_result(state: AgentState, output: TailorResumeOutput) -> No
         "output_tex_path": output.output_tex_path,
         "output_pdf_path": output.output_pdf_path,
     }
+    propagation_action = _memory_propagation_action(state, job_id)
+    if propagation_action.get("status") == "handled_by_rejected_revision":
+        propagation_action.update(
+            {
+                "status": (
+                    "applied_via_rejected_revision"
+                    if output.status == "OK"
+                    else "failed_via_rejected_revision"
+                ),
+                "output_tex_path": output.output_tex_path,
+                "output_pdf_path": output.output_pdf_path,
+                "change_log": [change.model_dump() for change in output.change_log],
+            }
+        )
     if output.revision_feedback_satisfied is True:
         state["pending_revision_job_ids"] = [
             item for item in state.get("pending_revision_job_ids", []) if item != job_id
         ]
-        if not state["pending_revision_job_ids"]:
+        if not _pending_revision_job_ids(state):
             state["phase"] = Phase.COVER_LETTERS.value
         return
     if revision_round >= MAX_REVISION_ROUNDS:
@@ -796,6 +890,70 @@ def _record_revision_result(state: AgentState, output: TailorResumeOutput) -> No
                 ),
             }
         )
+
+
+def _record_memory_propagation_result(
+    state: AgentState, output: TailorResumeOutput
+) -> None:
+    job_id = output.job_id
+    feedback_text = str(
+        state.get("memory_propagation_feedback_by_job", {}).get(job_id, "")
+    )
+    action = _memory_propagation_action(state, job_id)
+    action.update(
+        {
+            "status": "applied" if output.status == "OK" else "failed",
+            "output_tex_path": output.output_tex_path,
+            "output_pdf_path": output.output_pdf_path,
+            "change_log": [change.model_dump() for change in output.change_log],
+        }
+    )
+    round_logs = state.setdefault("revision_round_logs", {})
+    round_log = round_logs.setdefault(
+        "memory_propagation",
+        {
+            "review_round": 1,
+            "revision_round": 0,
+            "feedback_received_by_job": {},
+            "actions": [],
+            "kind": "memory_propagation",
+        },
+    )
+    round_log["feedback_received_by_job"][job_id] = feedback_text
+    round_log["actions"].append(
+        {
+            "review_round": 1,
+            "revision_round": 0,
+            "job_id": job_id,
+            "feedback_received": feedback_text,
+            "actions_taken": [
+                "Reran resume_tailoring to propagate relevant same-run memory.",
+                "No additional human review pause was requested.",
+            ],
+            "changes_accepted": [change.model_dump() for change in output.change_log],
+            "changes_rejected_or_skipped": [
+                *output.validation_failures,
+                *output.errors,
+            ],
+            "evidence_used": sorted(
+                {
+                    evidence_id
+                    for change in output.change_log
+                    for evidence_id in change.evidence_ids
+                }
+            ),
+            "status": output.status,
+            "feedback_satisfied": output.revision_feedback_satisfied,
+            "feedback_checks": output.revision_feedback_checks,
+            "output_tex_path": output.output_tex_path,
+            "output_pdf_path": output.output_pdf_path,
+        }
+    )
+    state["memory_propagation_job_ids"] = [
+        item for item in state.get("memory_propagation_job_ids", []) if item != job_id
+    ]
+    if not _pending_revision_job_ids(state):
+        state["phase"] = Phase.COVER_LETTERS.value
 
 
 def _ready_for_human_review(state: AgentState) -> bool:
@@ -914,6 +1072,26 @@ def _pending_revision_job_ids(state: AgentState) -> list[str]:
             continue
         if attempts >= MAX_REVISION_ROUNDS:
             pending.append(job_id)
+            continue
+        pending.append(job_id)
+    pending.extend(_pending_memory_propagation_job_ids(state))
+    return pending
+
+
+def _pending_memory_propagation_job_ids(state: AgentState) -> list[str]:
+    tailoring = state.get("tailoring_results", {})
+    pending: list[str] = []
+    for job_id in state.get("memory_propagation_job_ids", []):
+        action = _memory_propagation_action(state, job_id)
+        if action.get("status") != "pending_tailoring":
+            continue
+        latest = tailoring.get(job_id, {})
+        memory_ids = set(action.get("memory_fact_ids", []))
+        if memory_ids and any(
+            memory_ids & set(change.get("evidence_ids", []))
+            for change in latest.get("change_log", [])
+        ):
+            action["status"] = "already_applied"
             continue
         pending.append(job_id)
     return pending
@@ -1072,12 +1250,202 @@ def _store_review_memory(
             "comments_with_content": len(comments),
             "valid_fact_count": len(valid),
             "new_fact_ids": new_ids,
+            "memory_facts_written": [
+                fact.model_dump()
+                for fact in updated
+                if fact.active and fact.fact_id in set(new_ids)
+            ],
             "validation_failures": failures,
             "conflict_count": len(conflict_events),
             "active_values": [fact.canonical_value for fact in updated if fact.active],
         },
     )
     return [fact.model_dump() for fact in updated], new_ids, failures
+
+
+def _plan_memory_propagation(
+    state: AgentState,
+    decisions: dict[str, dict[str, Any]],
+    memory_facts: list[dict[str, Any]],
+    new_fact_ids: list[str],
+    *,
+    tracer: TraceManager,
+) -> list[dict[str, Any]]:
+    span_id = tracer.start_span(
+        "memory.propagation_plan",
+        input={
+            "top_3_job_ids": list(state.get("top_3_job_ids", [])),
+            "new_memory_fact_ids": new_fact_ids,
+        },
+    )
+    try:
+        facts = [
+            MemoryFact.model_validate(raw)
+            for raw in memory_facts
+            if raw.get("fact_id") in set(new_fact_ids) and raw.get("active", True)
+        ]
+        jobs = {
+            raw["job_id"]: Job.model_validate(raw)
+            for raw in state.get("jobs", [])
+            if raw.get("job_id") in set(state.get("top_3_job_ids", []))
+        }
+        actions: list[dict[str, Any]] = []
+        for job_id in state.get("top_3_job_ids", []):
+            relevant = _relevant_memory_facts_for_job(facts, jobs[job_id])
+            feedback = _memory_feedback(relevant)
+            if not relevant:
+                status = "not_relevant"
+            elif decisions.get(job_id, {}).get("decision") == "reject":
+                status = "handled_by_rejected_revision"
+            else:
+                status = "pending_tailoring"
+            actions.append(
+                {
+                    "job_id": job_id,
+                    "status": status,
+                    "memory_fact_ids": [fact.fact_id for fact in relevant],
+                    "memory_facts": [
+                        {
+                            "fact_id": fact.fact_id,
+                            "fact_type": fact.fact_type,
+                            "canonical_value": fact.canonical_value,
+                            "provenance": fact.provenance.model_dump(),
+                        }
+                        for fact in relevant
+                    ],
+                    "feedback": feedback,
+                    "reason": _memory_propagation_reason(status),
+                }
+            )
+        tracer.end_span(
+            span_id,
+            output={
+                "actions": actions,
+                "pending_job_ids": [
+                    action["job_id"]
+                    for action in actions
+                    if action["status"] == "pending_tailoring"
+                ],
+            },
+        )
+        return actions
+    except Exception as exc:
+        tracer.end_span(
+            span_id,
+            status="ERROR",
+            error_type=exc.__class__.__name__,
+            output={"error": str(exc)},
+        )
+        raise
+
+
+def _relevant_memory_facts_for_job(
+    facts: list[MemoryFact], job: Job
+) -> list[MemoryFact]:
+    job_evidence = build_job_evidence(job)
+    relevant: list[MemoryFact] = []
+    for fact in facts:
+        if fact.fact_type != "skill":
+            continue
+        if any(
+            job_evidence_supports_skill(item, fact.canonical_value)
+            for item in job_evidence
+        ):
+            relevant.append(fact)
+    return relevant
+
+
+def _memory_feedback(facts: list[MemoryFact]) -> str:
+    if not facts:
+        return ""
+    parts = [
+        f"{fact.canonical_value} ({fact.fact_id})"
+        for fact in facts
+    ]
+    return "Apply newly learned, reviewer-stated fact(s): " + "; ".join(parts) + "."
+
+
+def _memory_propagation_reason(status: str) -> str:
+    return {
+        "pending_tailoring": (
+            "New reviewer memory matches this job's posted requirements and can be "
+            "applied through the allowed tailoring sections."
+        ),
+        "handled_by_rejected_revision": (
+            "The job already needs a rejected-resume revision; relevant memory is "
+            "included in that revision feedback."
+        ),
+        "not_relevant": (
+            "No newly written memory fact matches this job's posted requirements."
+        ),
+    }.get(status, status)
+
+
+def _combined_review_and_memory_feedback(state: AgentState, job_id: str) -> str:
+    pieces = [
+        str(state.get("review_decisions", {}).get(job_id, {}).get("comment", "")),
+        str(state.get("memory_propagation_feedback_by_job", {}).get(job_id, "")),
+    ]
+    return " ".join(piece.strip() for piece in pieces if piece.strip())
+
+
+def _memory_propagation_action(state: AgentState, job_id: str) -> dict[str, Any]:
+    actions = state.setdefault("memory_propagation_actions", [])
+    for action in actions:
+        if action.get("job_id") == job_id:
+            return action
+    action = {
+        "job_id": job_id,
+        "status": "not_planned",
+        "memory_fact_ids": [],
+        "memory_facts": [],
+        "feedback": "",
+        "reason": "No propagation action was planned for this job.",
+    }
+    actions.append(action)
+    return action
+
+
+def _final_artifact_paths(
+    manifest: dict[str, Any],
+    tailoring_results: Mapping[str, Any],
+    cover_letter_results: Mapping[str, Any],
+) -> dict[str, dict[str, str]]:
+    paths: dict[str, dict[str, str]] = {}
+    for job_id, job_dir in zip(
+        manifest.get("job_ids", []),
+        manifest.get("job_directories", []),
+        strict=False,
+    ):
+        paths[job_id] = {
+            "job_directory": str(job_dir),
+            "resume_after_pdf": str(
+                tailoring_results.get(job_id, {}).get("output_pdf_path", "")
+            ),
+            "cover_letter_pdf": str(
+                cover_letter_results.get(job_id, {}).get("output_pdf_path", "")
+            ),
+        }
+    return paths
+
+
+def _write_trace_events_snapshot(
+    manifest: dict[str, Any], tracer: TraceManager
+) -> None:
+    output_root = manifest.get("output_root")
+    if not output_root:
+        return
+    Path(output_root, "trace_events.json").write_text(
+        json.dumps(
+            sanitize_public_artifact_references(
+                [event.__dict__ for event in tracer.events]
+            ),
+            indent=2,
+            ensure_ascii=False,
+            default=str,
+        ),
+        encoding="utf-8",
+    )
 
 
 def _revision_attempt_log(

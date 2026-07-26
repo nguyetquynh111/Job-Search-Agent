@@ -699,6 +699,18 @@ def test_graph_wiring_across_review_memory_revision_and_letters(
         "memory.conflict_handling"
     ) == 1
     assert set(final["review_history"][0]["actions_taken"]) == {rejected_job_id}
+    propagation = final["review_history"][0]["memory_propagation"]
+    assert any(
+        action["job_id"] != rejected_job_id
+        and action["status"] == "applied"
+        and "mem-" in " ".join(action["memory_fact_ids"])
+        for action in propagation
+    )
+    assert any(
+        action["status"] == "applied_via_rejected_revision"
+        for action in propagation
+        if action["job_id"] == rejected_job_id
+    )
     revision_rounds = final["review_history"][0]["revision_rounds"]
     assert revision_rounds[0]["review_round"] == 1
     assert revision_rounds[0]["revision_round"] == 1
@@ -719,7 +731,7 @@ def test_graph_wiring_across_review_memory_revision_and_letters(
     assert tool_names.count("run_filtering_tool") == 1
     assert tool_names.count("run_scoring_tool") == 1
     assert tool_names.count("run_fit_analysis_tool") == 3
-    assert tool_names.count("run_resume_tailoring_tool") == 4
+    assert tool_names.count("run_resume_tailoring_tool") == 5
     assert tool_names.count("run_cover_letter_tool") == 3
 
     assert final["status"] == "COMPLETED"
@@ -730,14 +742,14 @@ def test_graph_wiring_across_review_memory_revision_and_letters(
     assert [event.name for event in tracer.events].count("job_search_agent_run") == 1
     assert [event.name for event in tracer.events].count("memory.read") == 1
     assert [event.name for event in tracer.events].count("memory.write") == 1
-    assert [event.name for event in tracer.events].count("tool_registry.dispatch") == 12
+    assert [event.name for event in tracer.events].count("tool_registry.dispatch") == 13
     assert final["output_manifest"]["job_ids"] == final["top_3_job_ids"]
     assert final["output_manifest"]["run_id"] == "run-e2e"
     assert Path(final["output_manifest"]["output_root"]).name == "run-e2e"
     resume_compile_events = [
         event for event in tracer.events if event.name == "resume_tailoring.compile_pdf"
     ]
-    assert len(resume_compile_events) >= 4
+    assert len(resume_compile_events) >= 5
     cover_compile_events = [
         event for event in tracer.events if event.name == "cover_letter.compile_pdf"
     ]
@@ -794,7 +806,12 @@ def test_output_writer_produces_and_validates_three_complete_job_folders(
         (job_dir / "approved.tex").write_text("resume source", encoding="utf-8")
         (job_dir / "letter.tex").write_text("letter source", encoding="utf-8")
         fit_path = job_dir / "fit_analysis.md"
+        fit_json_path = job_dir / "fit_analysis.json"
         fit_path.write_text(f"# Fit analysis for {job_id}\n", encoding="utf-8")
+        fit_json_path.write_text(
+            '{"fit_analysis": "production-like fixture"}',
+            encoding="utf-8",
+        )
         (job_dir / "resume.aux").write_text("temporary", encoding="utf-8")
         tailoring[job_id] = {
             "output_pdf_path": str(job_dir / "approved.pdf"),
@@ -805,7 +822,10 @@ def test_output_writer_produces_and_validates_three_complete_job_folders(
             "output_pdf_path": str(job_dir / "letter.pdf"),
             "output_tex_path": str(job_dir / "letter.tex"),
         }
-        fit_artifacts[job_id] = {"markdown_path": str(fit_path)}
+        fit_artifacts[job_id] = {
+            "markdown_path": str(fit_path),
+            "json_path": str(fit_json_path),
+        }
 
     state = {
         "top_3_job_ids": job_ids,
@@ -821,6 +841,28 @@ def test_output_writer_produces_and_validates_three_complete_job_folders(
         "tailoring_results": tailoring,
         "cover_letter_results": letters,
         "fit_analysis_artifacts": fit_artifacts,
+        "review_history": [
+            {
+                "review_round": 1,
+                "decisions": {job_id: {"decision": "approve"} for job_id in job_ids},
+                "memory_propagation": [
+                    {
+                        "job_id": "J1",
+                        "output_tex_path": str(output_dir / "J1" / "resume_draft.tex"),
+                        "output_pdf_path": str(output_dir / "J1" / "resume_draft.pdf"),
+                    }
+                ],
+            }
+        ],
+        "trace_events": [
+            {
+                "name": "resume_tailoring.compile_pdf",
+                "output": {
+                    "output_tex_path": str(output_dir / "J1" / "resume_draft.tex"),
+                    "output_pdf_path": str(output_dir / "J1" / "resume_draft.pdf"),
+                },
+            }
+        ],
     }
 
     manifest = write_and_validate_outputs(state)
@@ -831,6 +873,14 @@ def test_output_writer_produces_and_validates_three_complete_job_folders(
         job_dir = output_dir / job_id
         assert all((job_dir / name).is_file() for name in MANDATORY_JOB_FILES)
         assert not (job_dir / "resume.aux").exists()
+    revision_text = (output_dir / "J1" / "revision_history.json").read_text(
+        encoding="utf-8"
+    )
+    trace_text = (output_dir / "trace_events.json").read_text(encoding="utf-8")
+    assert "resume_draft" not in revision_text
+    assert "output_tex_path" not in revision_text
+    assert "resume_draft" not in trace_text
+    assert "output_tex_path" not in trace_text
 
 
 def test_output_writer_isolates_artifacts_by_run_id(
@@ -853,7 +903,12 @@ def test_output_writer_isolates_artifacts_by_run_id(
             (job_dir / "approved.tex").write_text(f"resume {run_id}", encoding="utf-8")
             (job_dir / "letter.tex").write_text(f"letter {run_id}", encoding="utf-8")
             fit_path = job_dir / "fit_analysis.md"
+            fit_json_path = job_dir / "fit_analysis.json"
             fit_path.write_text(f"# {run_id} {job_id}\n", encoding="utf-8")
+            fit_json_path.write_text(
+                f'{{"run_id": "{run_id}", "job_id": "{job_id}"}}',
+                encoding="utf-8",
+            )
             tailoring[job_id] = {
                 "output_pdf_path": str(job_dir / "approved.pdf"),
                 "output_tex_path": str(job_dir / "approved.tex"),
@@ -863,7 +918,10 @@ def test_output_writer_isolates_artifacts_by_run_id(
                 "output_pdf_path": str(job_dir / "letter.pdf"),
                 "output_tex_path": str(job_dir / "letter.tex"),
             }
-            fit_artifacts[job_id] = {"markdown_path": str(fit_path)}
+            fit_artifacts[job_id] = {
+                "markdown_path": str(fit_path),
+                "json_path": str(fit_json_path),
+            }
         memory_file = output_dir / run_id / "memory.json"
         memory_file.write_text("[]", encoding="utf-8")
         return {
@@ -893,12 +951,10 @@ def test_output_writer_isolates_artifacts_by_run_id(
     assert Path(second["output_root"]) == output_dir / "run-b"
     assert (output_dir / "run-a" / "run_manifest.json").is_file()
     assert (output_dir / "run-b" / "run_manifest.json").is_file()
-    assert (output_dir / "run-a" / "J1" / "resume_after.tex").read_text(
-        encoding="utf-8"
-    ) == "resume run-a"
-    assert (output_dir / "run-b" / "J1" / "resume_after.tex").read_text(
-        encoding="utf-8"
-    ) == "resume run-b"
+    assert (output_dir / "run-a" / "J1" / "resume_after.pdf").is_file()
+    assert (output_dir / "run-b" / "J1" / "resume_after.pdf").is_file()
+    assert not (output_dir / "run-a" / "J1" / "approved.tex").exists()
+    assert not (output_dir / "run-b" / "J1" / "approved.tex").exists()
 
 
 # --- test_integration_real_pdflatex_end_to_end.py ---
@@ -960,5 +1016,7 @@ def test_real_pdflatex_complete_workflow_with_review_memory_and_revision(
         letter = final["cover_letter_results"][job_id]
         assert len(PdfReader(resume["output_pdf_path"]).pages) == 1
         assert len(PdfReader(letter["output_pdf_path"]).pages) == 1
-        assert Path(resume["output_tex_path"]).is_file()
-        assert Path(letter["output_tex_path"]).is_file()
+        assert Path(resume["output_pdf_path"]).name == "resume_after.pdf"
+        assert Path(letter["output_pdf_path"]).name == "cover_letter.pdf"
+        assert "output_tex_path" not in resume
+        assert "output_tex_path" not in letter

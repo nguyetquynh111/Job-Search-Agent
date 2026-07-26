@@ -11,7 +11,9 @@ from src.agent import (
 )
 from src.agent import EvidenceClaim, ProjectSwap
 from src.agent import Job
-from src.agent import load_jobs_csv, load_portfolio
+from src.agent import build_job_evidence
+from src.agent import load_candidate_profile, load_jobs_csv, load_portfolio
+from src.agent import load_resume_data, normalize_string_list
 from src.review.memory import JSONMemoryStore
 from src.review.memory import memory_fact_to_evidence
 from src.tools.fit_analysis import fit_analysis as entry
@@ -118,6 +120,77 @@ def make_input(
         current_resume_projects=current_resume_projects or [],
         portfolio_projects=portfolio_projects or [],
     )
+
+
+def production_like_input(job_id: str = "J017") -> AnalyzeFitInput:
+    jobs = {job.job_id: job for job in load_jobs_csv("data/jobs.csv")}
+    profile = load_candidate_profile("data/preferences.yaml")
+    resume = load_resume_data("data/resume.tex")
+    portfolio = load_portfolio("data/portfolio.txt")
+    profile = profile.model_copy(
+        update={
+            "resume_content": resume.plain_text,
+            "skills": normalize_string_list([*profile.skills, *resume.skills]),
+            "education": normalize_string_list(
+                [*profile.education, *resume.education]
+            ),
+            "experience": normalize_string_list(
+                [*profile.experience, *resume.experience]
+            ),
+            "resume_projects": normalize_string_list(
+                [*profile.resume_projects, *resume.projects]
+            ),
+            "resume_evidence": [*profile.resume_evidence, *resume.evidence_items],
+        }
+    )
+    job = jobs[job_id]
+    return AnalyzeFitInput(
+        job=job,
+        candidate_profile=profile,
+        evidence_items=[
+            *profile.resume_evidence,
+            *profile.master_skill_evidence,
+            *portfolio.evidence_items,
+            *profile.portfolio_evidence,
+        ],
+        job_evidence=build_job_evidence(job),
+        current_resume_projects=profile.resume_projects,
+        portfolio_projects=portfolio.projects,
+    )
+
+
+def test_production_like_llm_omission_gets_complete_fit_sections() -> None:
+    inp = production_like_input("J017")
+
+    def empty_but_valid(_system: str, _user: str) -> str:
+        return json.dumps(
+            {
+                "job_id": inp.job.job_id,
+                "relevant_experience": [],
+                "seniority": [],
+                "education": [],
+                "aligned_skills": [],
+                "evidenced_missing_skills": [],
+                "genuine_gaps": [],
+                "project_analysis": [],
+                "project_swap": None,
+            }
+        )
+
+    output = entry.analyze_fit(inp, complete_fn=empty_but_valid)
+
+    assert output.relevant_experience
+    assert output.seniority
+    assert output.education
+    assert output.aligned_skills or output.evidenced_missing_skills or output.genuine_gaps
+    assert output.project_analysis
+    for claims in (
+        output.relevant_experience,
+        output.seniority,
+        output.education,
+        output.project_analysis,
+    ):
+        assert all(claim.evidence_ids for claim in claims)
 
 
 # --- test_tool_fit_analysis_category.py ---

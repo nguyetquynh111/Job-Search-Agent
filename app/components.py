@@ -131,6 +131,15 @@ def render_page_header(eyebrow: str, title: str, description: str) -> None:
 def render_workflow_overview(current_phase: str | None = None) -> None:
     """Render a plain-language map of the application flow."""
 
+    st.markdown(
+        build_workflow_overview_html(current_phase),
+        unsafe_allow_html=True,
+    )
+
+
+def build_workflow_overview_html(current_phase: str | None = None) -> str:
+    """Return balanced markup for the four-step workflow overview."""
+
     phase = current_phase or "INITIALIZE"
     active_index = _workflow_step_index(phase)
     step_html: list[str] = []
@@ -145,21 +154,18 @@ def render_workflow_overview(current_phase: str | None = None) -> None:
             state = "pending"
             marker = str(index + 1)
         step_html.append(
-            f"""
-            <div class="workflow-map__item workflow-map__item--{state}">
-                <div class="workflow-map__marker">{escape(marker)}</div>
-                <div>
-                    <div class="workflow-map__short">{escape(short_label)}</div>
-                    <div class="workflow-map__title">{escape(title)}</div>
-                    <div class="workflow-map__copy">{escape(description)}</div>
-                </div>
-            </div>
-            """
+            (
+                f'<div class="workflow-map__item workflow-map__item--{state}">'
+                f'<div class="workflow-map__marker">{escape(marker)}</div>'
+                '<div class="workflow-map__body">'
+                f'<div class="workflow-map__short">{escape(short_label)}</div>'
+                f'<div class="workflow-map__title">{escape(title)}</div>'
+                f'<div class="workflow-map__copy">{escape(description)}</div>'
+                "</div>"
+                "</div>"
+            )
         )
-    st.markdown(
-        '<div class="workflow-map">' + "".join(step_html) + "</div>",
-        unsafe_allow_html=True,
-    )
+    return '<div class="workflow-map">' + "".join(step_html) + "</div>"
 
 
 def _workflow_step_index(phase: str | None) -> int:

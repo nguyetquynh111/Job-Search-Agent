@@ -42,7 +42,7 @@ from src.tracing.langfuse import TraceManager  # noqa: E402
 def main() -> int:
     args = _parse_args()
     _load_dotenv(REPO_ROOT / ".env")
-    run_id = args.run_id or f"run-production-e2e-{_timestamp()}"
+    run_id = f"job-search-live-{_timestamp()}"
     output_dir = _resolve_output_dir(args.output_dir)
     os.environ["OUTPUT_DIR"] = str(output_dir)
 
@@ -81,11 +81,8 @@ def main() -> int:
             model_config=model_config,
             langfuse_config=_langfuse_config([]),
         )
-        summary_path = Path(final["output_manifest"]["output_root"]) / "live_e2e_summary.json"
-        summary_path.write_text(
-            json.dumps(summary, indent=2, ensure_ascii=False, default=str),
-            encoding="utf-8",
-        )
+        _remove_source_resume_directory(resume_pdf.parent)
+        _remove_non_submission_output_artifacts(output_dir, run_id)
         print(json.dumps(summary, indent=2, ensure_ascii=False, default=str))
     except Exception as exc:  # noqa: BLE001 - produce a durable failure summary
         failure = {
@@ -109,7 +106,6 @@ def main() -> int:
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--run-id", default="")
     parser.add_argument("--output-dir", default=os.getenv("OUTPUT_DIR", "outputs"))
     parser.add_argument("--reject-job-id", default="J028")
     return parser.parse_args()
@@ -202,7 +198,34 @@ def _compile_original_resume(output_dir: Path) -> Path:
     page_count = len(PdfReader(str(pdf_path)).pages)
     if page_count != 1:
         raise RuntimeError(f"Source resume PDF must be one page; found {page_count}.")
+    _remove_latex_temporary_files(output_dir)
     return pdf_path
+
+
+def _remove_latex_temporary_files(directory: Path) -> None:
+    for suffix in (".aux", ".log", ".out", ".toc", ".fdb_latexmk", ".fls"):
+        for path in directory.glob(f"*{suffix}"):
+            path.unlink()
+
+
+def _remove_source_resume_directory(directory: Path) -> None:
+    if directory.name == "source_resume" and directory.is_dir():
+        shutil.rmtree(directory)
+
+
+def _remove_non_submission_output_artifacts(output_dir: Path, run_id: str) -> None:
+    run_root = output_dir / run_id
+    for path in (run_root / "checkpoints.sqlite", output_dir / "memory.json"):
+        if path.is_file():
+            path.unlink()
+    for child in output_dir.iterdir():
+        if (
+            child.is_dir()
+            and child.name.startswith("run-")
+            and child.name != run_id
+            and not (child / "run_manifest.json").is_file()
+        ):
+            shutil.rmtree(child)
 
 
 def _run_workflow(
@@ -284,11 +307,6 @@ def _build_summary(
         final.get("output_manifest", {}).get("output_root")
         or Path(os.environ["OUTPUT_DIR"]) / run_id
     )
-    final_state_path = root / "final_state.json"
-    final_state_path.write_text(
-        json.dumps(final, indent=2, ensure_ascii=False, default=str),
-        encoding="utf-8",
-    )
     trace_path = root / "trace_events.json"
     trace_events = json.loads(trace_path.read_text(encoding="utf-8"))
     memory = json.loads(Path(final["memory_file"]).read_text(encoding="utf-8"))
@@ -339,8 +357,6 @@ def _build_summary(
             "page_count": len(PdfReader(str(resume_pdf)).pages),
         },
         "e2e_command": command,
-        "summary_path": str(root / "live_e2e_summary.json"),
-        "final_state_path": str(final_state_path),
     }
 
 
