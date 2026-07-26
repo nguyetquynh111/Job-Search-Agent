@@ -10,9 +10,17 @@ Foundational single-agent codebase for a university group assignment. The workfl
 conda create -n job_search python==3.12
 conda activate job_search
 pip install -r requirements.txt
+conda install -c conda-forge tectonic
 cp .env.example .env
 streamlit run src/app/app.py
 ```
+
+`tailor_resume` and `generate_cover_letter` compile LaTeX to PDF. `tectonic` is a
+single self-contained binary available on conda-forge for macOS, Linux, and
+Windows, so every teammate gets the same compiler regardless of OS or admin
+rights — no separate MacTeX/MiKTeX/TeX Live install needed. If `tectonic` isn't
+on PATH, the tools fall back to a local `pdflatex` (from MacTeX/MiKTeX/TeX Live)
+if one is installed.
 
 ## Input Files
 
