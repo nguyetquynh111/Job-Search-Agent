@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import streamlit as st
 
-from src.ui.components import render_errors, render_page_header, render_sidebar
+from src.ui.components import (
+    render_errors,
+    render_page_header,
+    render_sidebar,
+    render_upload_validation,
+    validate_uploaded_file,
+)
 from src.ui.graph_resource import configured_graph_bundle
 from src.ui.session import (
     ensure_session_defaults,
@@ -18,8 +24,7 @@ runtime_error: Exception | None = None
 try:
     bundle = configured_graph_bundle()
 except Exception as exc:
-    # Uploading inputs is useful on its own and must not be taken down by an
-    # unavailable graph runtime or a tool that is still under development.
+    # Keep uploads available even when workflow dependencies are missing.
     runtime_error = exc
 
 state = render_sidebar(
@@ -40,41 +45,64 @@ with form_column:
         st.subheader("Input files")
         st.caption("Upload all four files to start a new search.")
 
-        with st.form("input_uploads_form"):
-            jobs_upload = st.file_uploader(
-                "Job listings",
-                type=["csv"],
-                help="CSV only. Include one job per row.",
-                key="jobs_upload",
-            )
-            preferences_upload = st.file_uploader(
-                "Preferences",
-                type=["yaml"],
-                help="YAML only. Define target titles, locations, remote preference, salary, and exclusions.",
-                key="preferences_upload",
-            )
+        jobs_upload = st.file_uploader(
+            "Job listings",
+            type=["csv"],
+            help="CSV only. Include one job per row.",
+            key="jobs_upload",
+        )
+        jobs_valid, jobs_message = validate_uploaded_file(jobs_upload, {".csv"})
+        render_upload_validation(jobs_valid, jobs_message)
 
-            left, right = st.columns(2)
-            with left:
-                resume_upload = st.file_uploader(
-                    "Resume",
-                    type=["tex"],
-                    help="LaTeX source file only.",
-                    key="resume_upload",
-                )
-            with right:
-                portfolio_upload = st.file_uploader(
-                    "Portfolio",
-                    type=["txt"],
-                    help="Plain-text file only. Separate projects with a blank line.",
-                    key="portfolio_upload",
-                )
+        preferences_upload = st.file_uploader(
+            "Preferences",
+            type=["yaml"],
+            help="YAML only. Define target titles, locations, remote preference, salary, and exclusions.",
+            key="preferences_upload",
+        )
+        preferences_valid, preferences_message = validate_uploaded_file(
+            preferences_upload,
+            {".yaml"},
+        )
+        render_upload_validation(preferences_valid, preferences_message)
 
-            start_submitted = st.form_submit_button(
-                "Start search",
-                type="primary",
-                use_container_width=True,
+        left, right = st.columns(2)
+        with left:
+            resume_upload = st.file_uploader(
+                "Resume",
+                type=["tex"],
+                help="LaTeX source file only.",
+                key="resume_upload",
             )
+            resume_valid, resume_message = validate_uploaded_file(
+                resume_upload,
+                {".tex"},
+            )
+            render_upload_validation(resume_valid, resume_message)
+        with right:
+            portfolio_upload = st.file_uploader(
+                "Portfolio",
+                type=["txt"],
+                help="Plain-text file only. Separate projects with a blank line.",
+                key="portfolio_upload",
+            )
+            portfolio_valid, portfolio_message = validate_uploaded_file(
+                portfolio_upload,
+                {".txt"},
+            )
+            render_upload_validation(portfolio_valid, portfolio_message)
+
+        all_files_valid = all(
+            [jobs_valid, preferences_valid, resume_valid, portfolio_valid]
+        )
+        start_submitted = st.button(
+            "Start search",
+            type="primary",
+            use_container_width=True,
+            disabled=not all_files_valid,
+        )
+        if not all_files_valid:
+            st.caption("Add all four valid files to enable the search.")
 
 with guide_column:
     with st.container(border=True):
@@ -140,7 +168,9 @@ if start_submitted:
         "resume_path": "Resume",
         "portfolio_path": "Portfolio",
     }
-    missing = [labels[key] for key, uploaded_file in uploads.items() if uploaded_file is None]
+    missing = [
+        labels[key] for key, uploaded_file in uploads.items() if uploaded_file is None
+    ]
     if missing:
         st.error(f"Upload these required files: {', '.join(missing)}.")
     else:

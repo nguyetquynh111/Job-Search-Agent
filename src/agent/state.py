@@ -25,6 +25,7 @@ class AgentState(TypedDict, total=False):
     memory_file: str
     memory_facts: list[dict[str, Any]]
     new_memory_fact_ids: list[str]
+    memory_validation_failures: list[str]
 
     filtered_jobs: list[dict[str, Any]]
     rejected_jobs: list[dict[str, Any]]
@@ -38,6 +39,7 @@ class AgentState(TypedDict, total=False):
 
     revision_round: int
     pending_revision_job_ids: list[str]
+    revision_round_job_ids: list[str]
     cover_letter_results: dict[str, dict[str, Any]]
 
     current_tool: str | None
@@ -51,6 +53,8 @@ class AgentState(TypedDict, total=False):
 
     trace_id: str | None
     trace_url: str | None
+    review_trace_parent_id: str | None
+    revision_trace_parent_id: str | None
     langfuse_status: str
 
 
@@ -83,6 +87,7 @@ def create_initial_state(
         memory_file=resolved_memory_file,
         memory_facts=[],
         new_memory_fact_ids=[],
+        memory_validation_failures=[],
         filtered_jobs=[],
         rejected_jobs=[],
         ranked_jobs=[],
@@ -93,6 +98,7 @@ def create_initial_state(
         approved_job_ids=[],
         revision_round=0,
         pending_revision_job_ids=[],
+        revision_round_job_ids=[],
         cover_letter_results={},
         current_tool=None,
         current_tool_input={},
@@ -102,5 +108,7 @@ def create_initial_state(
         errors=[],
         trace_id=None,
         trace_url=None,
+        review_trace_parent_id=None,
+        revision_trace_parent_id=None,
         langfuse_status="not initialized",
     )

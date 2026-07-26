@@ -75,12 +75,10 @@ def load_jobs_csv(path: str | Path) -> list[Job]:
             url = _optional_str(row.get("url")) or ""
             source = _optional_str(row.get("source"))
 
-            # URL/link headers explicitly identify a source URL. Retain ``source``
-            # as well for callers written against the legacy schema.
+            # Keep the URL in both fields for older callers.
             if url and source is None:
                 source = url
-            # A legacy ``source`` value is promoted only when it validates as an
-            # HTTP(S) URL; labels such as "LinkedIn" remain source-only.
+            # Promote source only when it is a real web address.
             if not url and source and _is_http_url(source):
                 url = source
 

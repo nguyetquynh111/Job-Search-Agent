@@ -21,6 +21,7 @@ class AnalyzeFitInput(StrictBaseModel):
     job: Job
     candidate_profile: CandidateProfile
     evidence_items: list[EvidenceItem] = Field(default_factory=list)
+    job_evidence: list[EvidenceItem] = Field(default_factory=list)
     current_resume_projects: list[str] = Field(default_factory=list)
     portfolio_projects: list[PortfolioProject] = Field(default_factory=list)
 
@@ -37,3 +38,4 @@ class FitAnalysisOutput(StrictBaseModel):
     genuine_gaps: list[EvidenceClaim] = Field(default_factory=list)
     project_analysis: list[EvidenceClaim] = Field(default_factory=list)
     project_swap: ProjectSwap | None = None
+    validation_failures: list[str] = Field(default_factory=list)

@@ -14,6 +14,7 @@ from src.schemas.filtering import FilterJobsInput, FilterJobsOutput
 from src.schemas.fit_analysis import AnalyzeFitInput, FitAnalysisOutput
 from src.schemas.scoring import ScoreJobsInput, ScoreJobsOutput
 from src.schemas.tailoring import TailorResumeInput, TailorResumeOutput
+from src.tools.modules import TOOL_MODULES
 
 ToolFunction = Callable[[BaseModel], BaseModel]
 
@@ -65,20 +66,20 @@ TOOL_CONTRACTS: dict[str, tuple[type[BaseModel], type[BaseModel], str]] = {
 def load_tool_registry() -> dict[str, ToolSpec]:
     """Load the five model-visible tools from real implementations."""
 
-    source_package = "src.tools.implementations"
     registry: dict[str, ToolSpec] = {}
     for name, (input_model, output_model, description) in TOOL_CONTRACTS.items():
+        module_path = TOOL_MODULES[name]
         try:
-            module = importlib.import_module(f"{source_package}.{name}")
+            module = importlib.import_module(module_path)
         except ModuleNotFoundError as exc:
             raise MissingRealToolError(
-                f"Real tool implementation missing: src/tools/implementations/{name}.py "
+                f"Real tool implementation missing: {module_path} "
                 f"with function {name}({input_model.__name__}) -> {output_model.__name__}"
             ) from exc
         func = getattr(module, name, None)
         if func is None:
             raise MissingRealToolError(
-                f"Tool function {name} not found in {source_package}.{name}"
+                f"Tool function {name} not found in {module_path}"
             )
         registry[name] = ToolSpec(
             name=name,

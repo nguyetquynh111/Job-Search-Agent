@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -45,3 +46,20 @@ def get_config() -> AppConfig:
     """Return the current process configuration."""
 
     return AppConfig()
+
+
+def validate_runtime_requirements(config: AppConfig | None = None) -> None:
+    """Fail early when the documented production workflow cannot finish."""
+
+    active = config or get_config()
+    errors: list[str] = []
+    if shutil.which("pdflatex") is None:
+        errors.append(
+            "pdflatex is not installed or not on PATH; PDF artifacts cannot be generated"
+        )
+    if not active.deepinfra_api_key or not active.llm_model:
+        errors.append(
+            "LLM_MODEL and DEEPINFRA_API_KEY are required for the single-agent controller"
+        )
+    if errors:
+        raise RuntimeError("Runtime preflight failed: " + "; ".join(errors) + ".")

@@ -35,8 +35,9 @@ class RunStatus(StrEnum):
 PHASE_TOOL_POLICY: dict[str, list[str]] = {
     Phase.FILTER.value: ["filter_jobs"],
     Phase.SCORE.value: ["score_jobs"],
-    Phase.FIT_ANALYSIS.value: ["analyze_fit"],
-    Phase.TAILOR.value: ["tailor_resume"],
+    # After scoring, the model can analyze another job or tailor a ready one.
+    Phase.FIT_ANALYSIS.value: ["analyze_fit", "tailor_resume"],
+    Phase.TAILOR.value: ["analyze_fit", "tailor_resume"],
     Phase.HUMAN_REVIEW.value: [],
     Phase.COVER_LETTERS.value: ["generate_cover_letter"],
 }

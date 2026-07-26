@@ -121,7 +121,9 @@ def _extract_known_technologies(comment: str) -> list[tuple[str, str]]:
     for token, canonical in _KNOWN_TECHNOLOGIES.items():
         escaped = re.escape(token)
         direct_assertion = re.search(
-            rf"\b(?:I|my)\b[^.!?;]{{0,100}}\b{escaped}\b",
+            rf"\bI\s+(?:also\s+)?(?:know|use|used|have used|work with|"
+            rf"have worked with|am proficient in|am skilled in|"
+            rf"am experienced with)\b[^.!?;]{{0,80}}\b{escaped}\b",
             comment,
             re.IGNORECASE,
         )
@@ -185,3 +187,49 @@ def _looks_like_skill(value: str) -> bool:
 def _canonicalize_skill(value: str) -> str:
     known = _KNOWN_TECHNOLOGIES.get(value.casefold())
     return known or value.strip()
+
+
+def validate_memory_facts(
+    facts: list[MemoryFact], comments_by_job: dict[str, str]
+) -> tuple[list[MemoryFact], list[str]]:
+    """Revalidate extracted facts against the exact reviewer statement.
+
+    Extraction is intentionally deterministic, but storage has its own guard so a
+    future extractor change cannot silently turn an editing request into candidate
+    evidence.
+    """
+
+    normalized_comments = {
+        job_id: " ".join(comment.split())
+        for job_id, comment in comments_by_job.items()
+    }
+    valid: list[MemoryFact] = []
+    failures: list[str] = []
+    for fact in facts:
+        job_id = fact.provenance.related_job_id
+        statement = normalized_comments.get(job_id or "", "")
+        if (
+            fact.provenance.source != "human_review"
+            or not statement
+            or fact.provenance.original_statement != statement
+        ):
+            failures.append(
+                f"rejected memory fact {fact.fact_id}: provenance does not match "
+                "the submitted reviewer feedback"
+            )
+            continue
+        reextracted = extract_memory_facts({job_id or "unknown": statement}, 0)
+        supported = any(
+            candidate.fact_type.casefold() == fact.fact_type.casefold()
+            and candidate.canonical_value.casefold()
+            == fact.canonical_value.casefold()
+            for candidate in reextracted
+        )
+        if not supported:
+            failures.append(
+                f"rejected memory fact {fact.fact_id}: reviewer statement does not "
+                f"explicitly assert {fact.canonical_value!r}"
+            )
+            continue
+        valid.append(fact)
+    return valid, failures

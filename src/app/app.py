@@ -23,23 +23,23 @@ apply_app_styles()
 pages = [
     st.Page(
         "views/1_Input.py",
-        title="Set up search",
+        title="1 · Set up search",
         icon=":material/tune:",
         default=True,
     ),
     st.Page(
         "views/2_Execution.py",
-        title="Run progress",
+        title="2 · Run progress",
         icon=":material/timeline:",
     ),
     st.Page(
         "views/3_Review.py",
-        title="Review drafts",
+        title="3 · Review drafts",
         icon=":material/rate_review:",
     ),
     st.Page(
         "views/4_Results.py",
-        title="Results",
+        title="4 · Results",
         icon=":material/folder_open:",
     ),
 ]

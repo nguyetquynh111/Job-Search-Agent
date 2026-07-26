@@ -14,6 +14,7 @@ class GenerateCoverLetterInput(StrictBaseModel):
     job: Job
     approved_resume_path: str
     candidate_evidence: list[EvidenceItem] = Field(default_factory=list)
+    job_evidence: list[EvidenceItem] = Field(default_factory=list)
 
 
 class GenerateCoverLetterOutput(StrictBaseModel):
@@ -22,6 +23,6 @@ class GenerateCoverLetterOutput(StrictBaseModel):
     job_id: str
     output_tex_path: str
     output_pdf_path: str
-    page_count: int = Field(ge=1)
+    page_count: int = Field(ge=0)
     evidence_used: list[str] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)

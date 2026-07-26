@@ -41,7 +41,11 @@ def load_langfuse_config() -> LangfuseConfig | None:
 
     public_key = (os.getenv("LANGFUSE_PUBLIC_KEY") or "").strip()
     secret_key = (os.getenv("LANGFUSE_SECRET_KEY") or "").strip()
-    host = (os.getenv("LANGFUSE_HOST") or DEFAULT_LANGFUSE_HOST).strip()
+    host = (
+        os.getenv("LANGFUSE_HOST")
+        or os.getenv("LANGFUSE_BASE_URL")
+        or DEFAULT_LANGFUSE_HOST
+    ).strip()
     if not public_key or not secret_key:
         logger.info("Langfuse disabled because configuration is missing")
         return None

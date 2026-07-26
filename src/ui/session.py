@@ -55,8 +55,7 @@ def ensure_session_defaults(session: MutableMapping[str, Any]) -> None:
 def start_graph_run(app: Any, session: MutableMapping[str, Any]) -> dict[str, Any]:
     """Start a new graph run from current UI input paths."""
 
-    # Keep the upload UI importable even when optional workflow dependencies are
-    # not installed yet. The graph is only needed after the user starts a run.
+    # The upload screen works without optional workflow dependencies.
     from src.agent.graph import invoke_new_run
     from src.agent.state import create_initial_state
 
@@ -193,6 +192,12 @@ def reset_demo_data(session: MutableMapping[str, Any]) -> None:
         "preferences_upload",
         "resume_upload",
         "portfolio_upload",
+        "confirm_reset_workspace",
+        "review_selected_job_id",
+        "results_selected_job_id",
     ]:
         session.pop(key, None)
+    for key in list(session):
+        if str(key).startswith(("decision_", "comment_")):
+            session.pop(key, None)
     ensure_session_defaults(session)

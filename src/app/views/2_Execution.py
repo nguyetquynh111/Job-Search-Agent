@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
-import pandas as pd
 import streamlit as st
 
 from src.ui.components import (
     format_phase,
     format_status,
+    group_rejected_jobs,
+    render_agent_decisions,
     render_errors,
     render_page_header,
+    render_ranked_job_card,
     render_sidebar,
+    render_tool_activity,
 )
 from src.ui.graph_resource import configured_graph_bundle
 from src.ui.session import ensure_session_defaults
@@ -80,70 +83,55 @@ ranked_tab, decisions_tab, activity_tab, filtered_tab = st.tabs(
 
 with ranked_tab:
     if ranked:
-        frame = pd.DataFrame(
-            [
-                {
-                    "Job ID": item["job"]["job_id"],
-                    "Role": item["job"]["title"],
-                    "Company": item["job"]["company"],
-                    "Match score": item["score"],
-                    "Selected": item["job"]["job_id"] in state.get("top_3_job_ids", []),
-                }
-                for item in ranked
-            ]
+        st.caption(
+            "Scores are calculated by deterministic code. Component explanations "
+            "below come directly from the scoring tool."
         )
-        st.dataframe(frame, use_container_width=True, hide_index=True)
+        for ranked_item in ranked:
+            render_ranked_job_card(
+                ranked_item,
+                state.get("top_3_job_ids", []),
+            )
     else:
         st.caption("Ranked jobs will appear here as the run progresses.")
 
 with decisions_tab:
-    if decisions:
-        st.dataframe(
-            [
-                {
-                    "Phase": format_phase(item.get("phase")),
-                    "Tool": str(item.get("selected_tool", "")).replace("_", " "),
-                    "Summary": item.get("decision_summary"),
-                }
-                for item in decisions
-            ],
-            use_container_width=True,
-            hide_index=True,
-        )
-    else:
-        st.caption("Agent decisions will appear here as the run progresses.")
+    st.caption(
+        "These are concise controller decisions about what should happen next. "
+        "Deterministic tool results are shown separately."
+    )
+    render_agent_decisions(decisions)
 
 with activity_tab:
-    if history:
-        st.dataframe(
-            [
-                {
-                    "Phase": format_phase(item.get("phase")),
-                    "Tool": str(item.get("tool", "")).replace("_", " "),
-                    "Status": "Complete",
-                }
-                for item in history
-            ],
-            use_container_width=True,
-            hide_index=True,
-        )
-    else:
-        st.caption("Tool activity will appear here as the run progresses.")
+    st.caption(
+        "Structured execution records show tool inputs and outputs without "
+        "presenting them as LLM reasoning."
+    )
+    render_tool_activity(history, state.get("errors", []))
 
 with filtered_tab:
     if rejected:
-        st.dataframe(
-            [
-                {
-                    "Job ID": item["job"]["job_id"],
-                    "Role": item["job"]["title"],
-                    "Company": item["job"]["company"],
-                    "Reason": "; ".join(item["reasons"]),
-                }
-                for item in rejected
-            ],
-            use_container_width=True,
-            hide_index=True,
+        grouped = group_rejected_jobs(rejected)
+        st.subheader("Rejection reasons")
+        summary_columns = st.columns(min(4, max(1, len(grouped))))
+        for index, (reason, jobs_for_reason) in enumerate(grouped.items()):
+            summary_columns[index % len(summary_columns)].metric(
+                reason,
+                len(jobs_for_reason),
+            )
+        st.caption(
+            "Reasons are preserved exactly as returned by the Filtering Tool. "
+            "A role may appear in more than one group."
         )
+        for reason, jobs_for_reason in grouped.items():
+            with st.expander(f"{reason} · {len(jobs_for_reason)}"):
+                for rejected_item in jobs_for_reason:
+                    job = rejected_item.get("job", {})
+                    st.markdown(
+                        f"**{job.get('title', 'Role')}** at "
+                        f"{job.get('company', 'Company')} · "
+                        f"`{job.get('job_id', '—')}`"
+                    )
+                    st.caption(" · ".join(rejected_item.get("reasons", [])))
     else:
         st.caption("No jobs have been filtered out.")

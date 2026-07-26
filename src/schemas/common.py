@@ -237,7 +237,7 @@ class CandidateProfile(StrictBaseModel):
     email: str | None = None
     persona: dict[str, Any] = Field(default_factory=dict)
     preferences: CandidatePreferences = Field(default_factory=CandidatePreferences)
-    # ``skills`` remains resume-only. Master skills are intentionally separate.
+    # Resume skills and master skills stay separate.
     skills: list[str] = Field(default_factory=list)
     master_skills: list[str] = Field(default_factory=list)
     education: list[str] = Field(default_factory=list)
@@ -305,4 +305,7 @@ class ChangeLogEntry(StrictBaseModel):
     change_id: str
     section: str
     description: str
-    evidence_ids: list[str] = Field(default_factory=list)
+    before_text: str
+    after_text: str
+    reason: str
+    evidence_ids: list[str] = Field(min_length=1)

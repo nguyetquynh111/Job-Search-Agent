@@ -56,7 +56,7 @@ def parse_experience_requirement(value: Any) -> ExperienceRequirement:
     if isinstance(value, bool):
         return ExperienceRequirement(raw_text=str(value))
     if isinstance(value, (int, float)):
-        if value != value:  # NaN
+        if value != value:  # Treat NaN as empty.
             return ExperienceRequirement()
         numeric = float(value)
         return ExperienceRequirement(
@@ -134,7 +134,7 @@ class Job(StrictBaseModel):
     )
     company_details: str = ""
     url: str = ""
-    # Original fields remain available to existing callers and fixtures.
+    # Keep the original fields for compatibility.
     requirements: list[str] = Field(default_factory=list)
     salary_min: int | None = None
     salary_max: int | None = None

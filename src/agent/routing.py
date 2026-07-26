@@ -9,7 +9,10 @@ from src.agent.state import AgentState
 def route_after_initialize(state: AgentState) -> str:
     """Route from initialize into the controller or error handler."""
 
-    if state.get("status") == RunStatus.FAILED.value:
+    if state.get("status") in {
+        RunStatus.FAILED.value,
+        RunStatus.FAILED_REVIEW.value,
+    }:
         return "error"
     return "agent_controller"
 
@@ -25,7 +28,10 @@ def route_after_agent_controller(state: AgentState) -> str:
 def route_after_execute_tool(state: AgentState) -> str:
     """Route after one tool execution."""
 
-    if state.get("status") == RunStatus.FAILED.value:
+    if state.get("status") in {
+        RunStatus.FAILED.value,
+        RunStatus.FAILED_REVIEW.value,
+    }:
         return "error"
     if state.get("phase") == Phase.HUMAN_REVIEW.value:
         return "prepare_review"
