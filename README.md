@@ -1,186 +1,318 @@
 # Job Search Agent
 
-Foundational single-agent codebase for a university group assignment. The workflow and shared Pydantic contracts are scaffolded, but the five business tools are intentionally not implemented yet.
+A single-agent job-search application that filters and ranks jobs, generates evidence-backed fit analyses, tailors resumes, supports human review, and produces cover letters.
 
-> Development status: the application cannot complete an end-to-end run until the five documented tool contracts are implemented by their assigned developers.
+## Requirements
 
-## Setup
+* Conda;
+* Python 3.12;
+* `pdflatex`;
+* DeepInfra API credentials;
+* Langfuse credentials for production tracing.
+
+Install the command-line TeX distribution:
 
 ```bash
-conda create -n job_search python==3.12
-conda activate job_search
-pip install -r requirements.txt
+brew install --cask basictex
+eval "$(/usr/libexec/path_helper)"
+pdflatex --version
+```
+
+## Environment Setup
+
+```bash
+conda create -n job-search-agent python=3.12 -y
+conda activate job-search-agent
+
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+Create the environment file:
+
+```bash
 cp .env.example .env
-streamlit run src/app/app.py
 ```
 
-## Input Files
+Configure `.env`:
 
-The app opens on the setup page and requires four uploads before a search starts:
+```env
+LLM_MODEL=provider/model-id
+DEEPINFRA_API_KEY=your-deepinfra-key
+DEEPINFRA_BASE_URL=https://api.deepinfra.com/v1/openai
 
-- job listings as `.csv`;
-- preferences as `.yaml`;
-- resume as `.tex`;
-- portfolio as `.txt`.
+LANGFUSE_PUBLIC_KEY=your-langfuse-public-key
+LANGFUSE_SECRET_KEY=your-langfuse-secret-key
+LANGFUSE_HOST=https://us.cloud.langfuse.com
 
-The jobs CSV accepts both schema-style headers such as `job_id` and `title` and
-spreadsheet-style headers such as `Job Title`, `Required Skills`, and `URL`.
-Preferences YAML may contain `target_titles`, `locations`, `remote`, `job_types`,
-`min_salary`, and `excluded_keywords`. In the portfolio text file, separate projects
-with a blank line and optionally include a line such as `Technologies: Python, SQL`.
-
-## Repository Layout
-
-```text
-src/
-  app/                 Streamlit entrypoint and pages
-  agent/               LangGraph workflow and controller
-  memory/              Persistent candidate memory
-  observability/       Local and Langfuse tracing helpers
-  review/              Human-review payload and resume logic
-  schemas/             Pydantic contracts for graph state and tools
-  tests/               Pytest test cases and fixtures
-  tools/               Tool design documents and future runtime registry
-data/                  Demo input fixtures
-outputs/               Generated artifacts, memory, and checkpoint database
-README.md              Project documentation
+OUTPUT_DIR=outputs
 ```
+
+Langfuse tracing is required for production runs. Create project API keys in
+Langfuse, set the three `LANGFUSE_*` variables above, and the completed run
+manifest will include the remote trace ID and public/share URL when Langfuse
+returns one. Tests use mocked or disabled tracing and never fabricate a public
+URL.
 
 ## Architecture
 
+The Streamlit app is a UI wrapper around core agent modules. Core code imports
+`src.config`, agent orchestration, schemas, tools, review, tracing, and utilities;
+it does not import Streamlit or app configuration.
+
 ```text
-Streamlit UI
-    |
-    v
-LangGraph checkpointer (SQLite for app, memory saver for tests)
-    |
-    v
-initialize -> agent_controller -> execute_tool <----------------+
-                  |              |                              |
-                  |              +-> phase guard + registry      |
-                  |                                             |
-                  +-> one structured decision per tool call      |
-                                                                |
-prepare_review -> human_review_interrupt -> process_feedback ----+
-                                      |        |
-                                      |        v
-                                      |   update_memory -> revision_controller
-                                      |        |
-                                      +--------+-> finalize_resumes
-                                                    |
-                                                    v
-                                          generate_cover_letters
-                                                    |
-                                                    v
-                                                 complete
+UI / CLI
+   |
+   v
+Agent Controller
+   |
+   v
+Workflow Graph
+   |
+   v
+Structured Tool Request
+   |
+   v
+Tool Registry / Executor
+   |-- filtering
+   |-- scoring
+   |-- fit_analysis
+   |-- resume_tailoring
+   `-- cover_letter
+   |
+   v
+Human Review Pause
+   |
+   v
+Memory + Final Outputs
 ```
 
-The system has exactly one controller, `SingleAgentController`, and exactly five model-visible tools:
+Responsibilities:
 
-- `filter_jobs`
-- `score_jobs`
-- `analyze_fit`
-- `tailor_resume`
-- `generate_cover_letter`
+* `src.agent.controller` starts and resumes compiled graph runs.
+* `src.agent.graph` owns workflow order and LangGraph nodes.
+* `src.agent.state` owns persisted graph state and initial state creation.
+* `src.tools.registry` validates structured tool calls and dispatches to public
+  tool entrypoints.
+* `src.tools.filtering_scoring.scoring` performs deterministic code-based
+  scoring, stable ranking, and automatic Top 3 selection. Numeric scores are not
+  accepted from model text.
+* `src.review.human_review` creates the one human review pause after three draft
+  resumes are ready.
+* `src.review.memory` stores validated review-derived memory facts.
+* `src.tracing.langfuse` records run, tool dispatch, tool result, LLM generation,
+  review, memory, and final status observations.
 
-Deterministic graph nodes enforce prerequisites and the mandatory phase order. When
-an LLM is configured, it receives a compact workflow snapshot and the currently
-allowed tool descriptions, then returns a structured tool intent and auditable
-decision summary. Python assembles the tool arguments from checkpointed,
-Pydantic-validated evidence so the model cannot rewrite candidate facts. Offline
-mode uses the same state machine with a clearly labelled policy decision.
-
-When `DEEPINFRA_API_KEY` and `LLM_MODEL` are configured, the controller attempts a structured DeepInfra model decision call. `DEEPINFRA_BASE_URL` defaults to `https://api.deepinfra.com/v1/openai`. If the LLM is unavailable, local runs fall back to the deterministic controller path and record concise decision summaries without hidden chain-of-thought.
-
-## Observability
-
-Langfuse Cloud observability is used to inspect one complete job-search workflow across input loading, agent decisions, tool execution, human review, revisions, memory persistence, and artifact generation. The root trace name is `job_search_agent_run`, and the same trace ID is reused for all related spans in that submitted run.
-
-Langfuse is optional for local development. If credentials are missing, invalid, the SDK is unavailable, authentication fails, or the network is unavailable, the app falls back to local no-op tracing and the job-search workflow continues.
-
-The Langfuse Cloud project is named `Job-Search`. Create API keys in the Langfuse dashboard by opening the `Job-Search` project, going to project settings, and creating API credentials. Put the values in `.env` using the US Cloud host:
-
-```env
-LANGFUSE_PUBLIC_KEY=pk-lf-...
-LANGFUSE_SECRET_KEY=sk-lf-...
-LANGFUSE_HOST=https://us.cloud.langfuse.com
-```
-
-The committed `.env.example` contains blank key placeholders and the required US host. Never commit a real `.env` file.
-
-The Streamlit sidebar reports one of:
-
-- `Observability: Langfuse connected`
-- `Observability: Langfuse unavailable`
-- `Observability: Local no-op tracing`
-
-After a run with valid credentials, open the Langfuse `Job-Search` project dashboard and filter traces by the name `job_search_agent_run`. Nested spans should share the run trace ID and include safe metadata such as `run_id`, `session_id`, `tool_name`, `job_id`, `company`, `match_score`, `result_count`, `review_round`, `status`, `duration_ms`, and `error_type`. Resume contents, cover-letter contents, API keys, full prompts, and large job descriptions are intentionally not sent.
-
-## Tool Design Handoff
-
-No business-tool implementation is included at this stage. Each tool has a documentation-only folder containing its README and detailed input/output contract:
-
-| Tool | Documentation | Contract |
-| --- | --- | --- |
-| `filter_jobs` | [`src/tools/filtering/`](src/tools/filtering/) | `FilterJobsInput` to `FilterJobsOutput` |
-| `score_jobs` | [`src/tools/scoring/`](src/tools/scoring/) | `ScoreJobsInput` to `ScoreJobsOutput` |
-| `analyze_fit` | [`src/tools/fit_analysis/`](src/tools/fit_analysis/) | `AnalyzeFitInput` to `FitAnalysisOutput` |
-| `tailor_resume` | [`src/tools/resume_tailoring/`](src/tools/resume_tailoring/) | `TailorResumeInput` to `TailorResumeOutput` |
-| `generate_cover_letter` | [`src/tools/cover_letter/`](src/tools/cover_letter/) | `GenerateCoverLetterInput` to `GenerateCoverLetterOutput` |
-
-The shared Pydantic contract references remain in `src/schemas/` so independently developed tools can integrate against the same boundaries. The future implementation modules will be loaded by `src/tools/registry.py`; until those modules exist, startup is expected to fail with a missing-tool message.
-
-## Human Review
-
-LangGraph has one human-review gate, reached only after all three selected resumes
-are tailored. The interrupt payload contains all three resumes together:
+Compatibility imports preserved for older callers:
 
 ```python
-{
-    "review_round": 1,
-    "max_revision_rounds": 2,
-    "resumes": {
-        "J001": {
-            "job_title": "...",
-            "company": "...",
-            "fit_analysis": {...},
-            "change_log": [...],
-            "resume_pdf_path": "..."
-        }
-    }
-}
+import src.agent.controller
+import src.agent.graph
+import src.agent.state
+import src.schemas.jobs
+import src.tools.registry
 ```
 
-The Review page requires one approve/reject decision per selected job and resumes
-the graph with `Command(resume=feedback)`. Rejected resumes are revised within this
-same review stage, using the previous tailored `.tex` rather than restarting from
-the source resume. At most two revision rounds are allowed. Each round records the
-feedback, memory writes, actions taken, change log, and resulting artifact paths.
-If changes are still required after round two, the run status becomes
-`FAILED_REVIEW` and cover letters are not generated.
-
-## Persistent Memory
-
-Candidate memory is stored in `outputs/memory.json` by default. The file and its
-parent directory are created automatically when missing. Review comments are scanned
-for durable candidate facts, such as skills or technologies. Editing preferences such
-as “make this shorter” are ignored.
-
-When a new fact is written:
-
-- the JSON file is updated;
-- `memory_facts` in the graph state is updated;
-- all Top-3 drafts are reconsidered immediately with the new memory as evidence,
-  including drafts that were approved before the new fact was learned;
-- a `persist_memory` trace span is recorded.
-
-
-## Tests
-
-The existing integration tests describe the target workflow behavior. The full suite is expected to fail at tool loading until all five implementation modules are supplied. After implementation, run:
+## Run the Application
 
 ```bash
-pytest
+conda activate job-search-agent
+python -m streamlit run app/app.py
 ```
 
-Test cases live in `src/tests/`. The intended coverage includes phase-policy enforcement, scoring/top-three gating, review interrupt payload shape, revision limit, cover-letter approval guard, JSON memory persistence, same-run memory availability, full end-to-end completion, Streamlit rerun safety, and root trace reuse. Each tool developer should also add contract-focused unit tests described in that tool's README.
+Open the URL printed by Streamlit, normally:
+
+```text
+http://localhost:8501
+```
+
+## Application Workflow
+
+The graph performs initialization, then asks the configured chat model to select
+the next registered tool using the registry's structured tool schemas. The graph
+validates the selected tool name and arguments, enforces the legal workflow order,
+and dispatches through the registry. Scoring remains deterministic Python code:
+the model may select the `scoring` tool but does not provide or edit score
+values. After three draft resumes are ready, the graph interrupts exactly once
+for human review. Rejected drafts can trigger bounded resume revisions and memory
+updates; approved Top 3 jobs continue to cover-letter generation.
+
+Pipeline order is fixed as: load candidate profile, portfolio, preferences,
+resume, and memory; filter jobs; deterministically score accepted jobs;
+automatically select the Top 3; run fit analysis for each Top 3 job; tailor one
+resume for each Top 3 job; pause once for human review; revise rejected resumes
+for at most two rounds; finalize approved resumes; generate cover letters as the
+last tool.
+
+Human review happens in one interrupt payload containing all three Top 3 resume
+drafts, fit analyses, change logs, project swaps, and evidence citations. Each
+resume is approved or rejected independently. Approved resumes are not
+regenerated; rejected resumes are revised automatically using the submitted
+comments, with a hard limit of two revision attempts. Every attempted revision is
+recorded in `review_history.json` and the job's `revision_history.json` with the
+review round, revision round, feedback received, actions taken, accepted changes,
+rejected or skipped changes, evidence used, and deterministic feedback checks.
+
+### Filtering Rules
+
+`run_filtering_tool` preserves accepted and rejected jobs separately. Each
+rejected job carries one or more specific reasons. The rules are evaluated in a
+stable order:
+
+* company exclusion list, compared case- and whitespace-insensitively;
+* remote-only preference, when enabled;
+* preferred locations, while allowing remote-eligible roles;
+* minimum years of experience above the candidate's configured experience;
+* excluded title/description keywords;
+* target-title alignment against AI/ML target role vocabulary.
+
+Final run outputs include `filtered_jobs.json` and `rejected_jobs.json` at the
+run root, in addition to the trace event log.
+
+### Scoring Formula
+
+`run_scoring_tool` is deterministic Python code. The model may select the tool,
+but score values are calculated only inside the tool. Candidate evidence is built
+from the resume, every portfolio project, the master skills list, and persistent
+memory facts; scoring is not limited to the current resume text.
+
+Scores use a 0-100 weighted sum:
+
+```text
+score =
+  55 * skill_match
++ 25 * experience_alignment
++ 15 * industry_domain_alignment
++  5 * location_alignment
+```
+
+`skill_match` is the fraction of required skills with candidate evidence,
+`experience_alignment` compares candidate years to the role minimum,
+`industry_domain_alignment` measures overlap with curated domain terms, and
+`location_alignment` gives light credit to remote-eligible roles. Jobs are sorted
+by score descending; ties preserve the accepted-job input order, making Top 3
+selection deterministic and automatic. Final run outputs include
+`ranked_jobs.json`.
+
+## Input Formats
+
+### Job Listings
+
+CSV files must include:
+
+```text
+job_id, title, company, industry_domain, location, remote,
+description, required_skills, years_experience_required,
+company_details, url, salary_min, salary_max
+```
+
+### Preferences
+
+Preferences are provided as YAML:
+
+```yaml
+candidate:
+  years_of_experience: 4
+
+preferences:
+  target_job_titles:
+    - Machine Learning Engineer
+  preferred_locations:
+    - Remote, US
+  remote_only: false
+  excluded_companies: []
+  job_types:
+    - full-time
+  min_salary: 100000
+  excluded_keywords: []
+
+master_skills:
+  - Python
+  - PyTorch
+```
+
+### Resume
+
+The resume must be a LaTeX file.
+
+Regenerate the original committed PDF with:
+
+```bash
+pdflatex -interaction=nonstopmode -halt-on-error -output-directory data data/resume.tex
+```
+
+### Portfolio
+
+The portfolio is a plain-text file. Structured projects should include:
+
+```text
+PROJECT_ID
+PROJECT_NAME
+SUMMARY
+TECH_STACK
+```
+
+## Validation
+
+Run the test suite:
+
+```bash
+pytest -q
+```
+
+## Outputs
+
+Generated files are written to:
+
+```text
+outputs/
+  checkpoints.sqlite
+  <run-id>/
+    run_manifest.json
+    memory.json
+    trace_events.json
+    filtered_jobs.json
+    rejected_jobs.json
+    ranked_jobs.json
+    review_history.json
+    <job-id>/
+      job_details.json
+      fit_analysis.json
+      fit_analysis.md
+      resume_before.pdf
+      resume_after.tex
+      resume_after.pdf
+      cover_letter.tex
+      cover_letter.pdf
+      change_log.json
+      human_review_decision.json
+      revision_history.json
+```
+
+## Tracing
+
+With Langfuse configured, each run creates one root trace named:
+
+```text
+job_search_agent_run
+```
+
+The trace covers:
+
+* controller decisions;
+* LLM generations;
+* registry tool dispatch and tool results;
+* fit analysis;
+* resume tailoring;
+* human review;
+* memory updates;
+* memory conflict handling;
+* revisions;
+* LaTeX compilation;
+* PDF page validation;
+* cover-letter generation.
+
+Open the Langfuse trace from the `trace_url` field in
+`outputs/<run-id>/run_manifest.json` or from the Streamlit observability panel.
+If tracing is explicitly enabled without credentials, startup fails before the
+run begins.

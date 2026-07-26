@@ -1,1 +1,1 @@
-"""Job Search Agent package."""
+"""Job Search Agent source package."""

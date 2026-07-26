@@ -1,12 +1,38 @@
-"""LangGraph shared state definitions."""
+"""LangGraph state and initial-state construction for the job-search agent."""
 
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import Any, TypedDict
 from uuid import uuid4
 
-from src.agent.phase_policy import Phase, RunStatus
-from src.config import get_config
+from src.agent.errors import ToolExecutionError
+from src.utils.paths import memory_path_for_run
+
+
+class Phase(StrEnum):
+    """Workflow phases."""
+
+    INITIALIZE = "INITIALIZE"
+    FILTER = "FILTER"
+    SCORE = "SCORE"
+    FIT_ANALYSIS = "FIT_ANALYSIS"
+    TAILOR = "TAILOR"
+    HUMAN_REVIEW = "HUMAN_REVIEW"
+    COVER_LETTERS = "COVER_LETTERS"
+    COMPLETE = "COMPLETE"
+    ERROR = "ERROR"
+
+
+class RunStatus(StrEnum):
+    """Workflow status values."""
+
+    CREATED = "CREATED"
+    RUNNING = "RUNNING"
+    WAITING_FOR_REVIEW = "WAITING_FOR_REVIEW"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    FAILED_REVIEW = "FAILED_REVIEW"
 
 
 class AgentState(TypedDict, total=False):
@@ -25,6 +51,7 @@ class AgentState(TypedDict, total=False):
     memory_file: str
     memory_facts: list[dict[str, Any]]
     new_memory_fact_ids: list[str]
+    memory_validation_failures: list[str]
 
     filtered_jobs: list[dict[str, Any]]
     rejected_jobs: list[dict[str, Any]]
@@ -32,12 +59,15 @@ class AgentState(TypedDict, total=False):
     top_3_job_ids: list[str]
 
     fit_analyses: dict[str, dict[str, Any]]
+    fit_analysis_artifacts: dict[str, dict[str, str]]
+    fit_analysis_refresh_job_ids: list[str]
     tailoring_results: dict[str, dict[str, Any]]
     review_decisions: dict[str, dict[str, Any]]
     approved_job_ids: list[str]
 
     revision_round: int
     pending_revision_job_ids: list[str]
+    revision_round_job_ids: list[str]
     cover_letter_results: dict[str, dict[str, Any]]
 
     current_tool: str | None
@@ -51,7 +81,18 @@ class AgentState(TypedDict, total=False):
 
     trace_id: str | None
     trace_url: str | None
+    output_manifest: dict[str, Any]
+    review_trace_parent_id: str | None
+    revision_trace_parent_id: str | None
     langfuse_status: str
+
+
+def state_value(state: AgentState, key: str) -> Any:
+    """Return a required graph-state value for the current workflow phase."""
+
+    if key not in state:
+        raise ToolExecutionError(f"Missing required state value: {key}")
+    return state[key]
 
 
 def create_initial_state(
@@ -67,7 +108,7 @@ def create_initial_state(
 
     resolved_run_id = run_id or f"run-{uuid4().hex[:12]}"
     resolved_thread_id = thread_id or f"thread-{uuid4().hex[:12]}"
-    resolved_memory_file = memory_file or str(get_config().memory_file)
+    resolved_memory_file = memory_file or str(memory_path_for_run(resolved_run_id))
     return AgentState(
         run_id=resolved_run_id,
         thread_id=resolved_thread_id,
@@ -83,16 +124,20 @@ def create_initial_state(
         memory_file=resolved_memory_file,
         memory_facts=[],
         new_memory_fact_ids=[],
+        memory_validation_failures=[],
         filtered_jobs=[],
         rejected_jobs=[],
         ranked_jobs=[],
         top_3_job_ids=[],
         fit_analyses={},
+        fit_analysis_artifacts={},
+        fit_analysis_refresh_job_ids=[],
         tailoring_results={},
         review_decisions={},
         approved_job_ids=[],
         revision_round=0,
         pending_revision_job_ids=[],
+        revision_round_job_ids=[],
         cover_letter_results={},
         current_tool=None,
         current_tool_input={},
@@ -102,5 +147,11 @@ def create_initial_state(
         errors=[],
         trace_id=None,
         trace_url=None,
+        output_manifest={},
+        review_trace_parent_id=None,
+        revision_trace_parent_id=None,
         langfuse_status="not initialized",
     )
+
+
+__all__ = ["AgentState", "Phase", "RunStatus", "create_initial_state", "state_value"]

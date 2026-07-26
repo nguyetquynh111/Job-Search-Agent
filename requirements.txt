@@ -1,12 +1,27 @@
-langchain-core>=0.3.0
-langchain-openai>=0.2.0
-langgraph>=0.2.60
-langgraph-checkpoint-sqlite>=2.0.0
-langfuse>=2.53.0,<3.0.0
-pydantic>=2.7.0
-python-dotenv>=1.0.1
-PyYAML>=6.0.2
-pandas>=2.2.0
-streamlit>=1.37.0
-pytest>=8.2.0
-pypdf>=4.2.0
+# Tested with Python 3.12.11. Pin direct dependencies so a fresh checkout
+# resolves the same application and test environment.
+
+# Agent workflow and model integration
+langchain-core==1.5.1
+langchain-openai==1.4.1
+langgraph==1.2.9
+langgraph-checkpoint-sqlite==3.1.0
+
+# Observability
+langfuse==2.60.10
+
+# Data loading, validation, and PDF inspection
+pandas==3.0.5
+pydantic==2.13.4
+pypdf==6.14.2
+python-dotenv==1.2.2
+PyYAML==6.0.3
+
+# User interface
+streamlit==1.60.0
+
+# Test runner and quality checks
+pytest==9.1.1
+pyright==1.1.411
+ruff==0.15.20
+vulture==2.16

@@ -1,1 +1,1 @@
-"""Tool registry and implementations."""
+"""Callable job-search tools."""

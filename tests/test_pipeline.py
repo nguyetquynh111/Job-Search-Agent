@@ -1,0 +1,778 @@
+"""Consolidated tests for this domain."""
+
+from __future__ import annotations
+
+from pathlib import Path
+import subprocess
+import sys
+from pypdf import PdfReader
+from pypdf import PdfWriter
+from src.agent import (
+    ToolExecutionError,
+    create_sqlite_checkpointer,
+    validate_artifact_output,
+)
+from src.agent import (
+    build_agent_graph,
+    create_memory_checkpointer,
+    invoke_new_run,
+    resume_run,
+)
+from src.agent import (
+    CandidatePreferences,
+    Job,
+    MANDATORY_JOB_FILES,
+    write_and_validate_outputs,
+)
+from src.agent import create_initial_state
+from src.review.human_review import build_review_payload
+from src.tools.cover_letter import cover_letter as cover_module
+from src.tools.cover_letter.cover_letter import run_cover_letter_tool
+from src.tools.filtering_scoring.filtering import run_filtering_tool
+from src.tools.filtering_scoring.scoring import ScoredJob, run_scoring_tool
+from src.tools.fit_analysis.fit_analysis import run_fit_analysis_tool
+from src.tools.resume_tailoring import resume_tailoring as tailoring_module
+from src.tools.resume_tailoring.resume_tailoring import TailorResumeOutput
+from src.tools.resume_tailoring.resume_tailoring import run_resume_tailoring_tool
+from src.tools.registry import (
+    ToolArgumentError,
+    UnknownToolError,
+    get_registered_tools,
+    get_tool,
+    get_tool_definitions,
+    invoke_tool,
+)
+from src.agent.tool_selection import ModelToolCall, validate_model_tool_call
+from src.tools.filtering_scoring.filtering import FilterJobsOutput
+from src.tools.filtering_scoring.scoring import ScoreJobsOutput
+from src.tools.fit_analysis.contracts import FitAnalysisOutput
+from src.tracing.langfuse import TraceManager
+import pytest
+import shutil
+
+# --- test_agent_graph.py ---
+"""Graph and artifact validation behavior."""
+
+
+def test_sqlite_checkpointer_creates_missing_parent_and_database(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "missing" / "checkpoints.sqlite"
+    _, context = create_sqlite_checkpointer(db_path)
+    try:
+        assert db_path.is_file()
+    finally:
+        context.__exit__(None, None, None)
+
+
+def test_orchestrator_rejects_placeholder_artifact_paths() -> None:
+    output = TailorResumeOutput(
+        job_id="J001",
+        status="OK",
+        output_tex_path="outputs/J001/resume.tex",
+        output_pdf_path="outputs/J001/resume.pdf",
+        page_count=1,
+    )
+
+    with pytest.raises(ToolExecutionError, match="does not exist"):
+        validate_artifact_output("run_resume_tailoring_tool", output)
+
+
+def test_orchestrator_rejects_a_real_two_page_pdf(tmp_path: Path) -> None:
+    tex_path = tmp_path / "resume.tex"
+    pdf_path = tmp_path / "resume.pdf"
+    tex_path.write_text("\\documentclass{article}", encoding="utf-8")
+    writer = PdfWriter()
+    writer.add_blank_page(width=612, height=792)
+    writer.add_blank_page(width=612, height=792)
+    with pdf_path.open("wb") as handle:
+        writer.write(handle)
+    output = TailorResumeOutput(
+        job_id="J001",
+        status="OK",
+        output_tex_path=str(tex_path),
+        output_pdf_path=str(pdf_path),
+        page_count=1,
+    )
+
+    with pytest.raises(ToolExecutionError, match="has 2 pages"):
+        validate_artifact_output("run_resume_tailoring_tool", output)
+
+
+# --- test_agent_orchestration_contract.py ---
+"""The orchestrator dispatches structured tool calls through the registry."""
+
+
+REQUIRED_TOOL_NAMES = [
+    "filtering",
+    "scoring",
+    "fit_analysis",
+    "resume_tailoring",
+    "cover_letter",
+]
+
+
+def test_tool_registry_contains_required_tools_once() -> None:
+    tools = get_registered_tools()
+
+    assert [tool.name for tool in tools] == REQUIRED_TOOL_NAMES
+    assert len({tool.name for tool in tools}) == len(REQUIRED_TOOL_NAMES)
+    assert get_tool("scoring").callable_name == "run_scoring_tool"
+
+
+def test_legacy_public_imports_and_core_imports_do_not_load_streamlit() -> None:
+    script = """
+import sys
+import src.agent.controller as controller
+import src.agent.graph as graph
+import src.agent.state as state
+import src.schemas.jobs as jobs
+import src.tools.registry as registry
+
+assert controller.AgentController
+assert graph.build_agent_graph
+assert state.AgentState
+assert jobs.Job
+assert registry.get_registered_tools
+assert "streamlit" not in sys.modules
+print("public imports: OK")
+"""
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.strip() == "public imports: OK"
+
+
+def test_registry_validates_structured_dispatch_and_errors() -> None:
+    job = Job(
+        job_id="J-test",
+        title="Machine Learning Engineer",
+        company="Example AI",
+        location="Remote, US",
+        remote=True,
+        description="Build ML systems.",
+        required_skills=["Python"],
+    )
+    result = invoke_tool(
+        "filtering",
+        {
+            "jobs": [job.model_dump()],
+            "preferences": CandidatePreferences(remote_only=True).model_dump(),
+        },
+        context={"tracer": TraceManager(enabled=False)},
+    )
+
+    assert isinstance(result, FilterJobsOutput)
+    assert [accepted.job_id for accepted in result.accepted_jobs] == ["J-test"]
+    with pytest.raises(UnknownToolError, match="Unknown tool"):
+        invoke_tool("unknown", {})
+    with pytest.raises(ToolArgumentError, match="Invalid arguments"):
+        invoke_tool("filtering", {"jobs": []})
+
+
+def test_llm_style_tool_call_uses_bound_definitions_and_dispatches() -> None:
+    definitions = get_tool_definitions()
+
+    class FakeModel:
+        def choose_tool(self, tool_definitions):
+            assert [tool["name"] for tool in tool_definitions] == REQUIRED_TOOL_NAMES
+            return {
+                "name": "filtering",
+                "arguments": {
+                    "jobs": [
+                        {
+                            "job_id": "J-fake",
+                            "title": "ML Engineer",
+                            "company": "Example",
+                            "description": "Build ML.",
+                        }
+                    ],
+                    "preferences": {},
+                },
+            }
+
+    tool_call = FakeModel().choose_tool(definitions)
+    result = invoke_tool(tool_call["name"], tool_call["arguments"])
+
+    assert isinstance(result, FilterJobsOutput)
+    assert result.accepted_jobs[0].job_id == "J-fake"
+
+
+def test_model_tool_calls_reject_unknown_illegal_and_malformed_arguments() -> None:
+    valid_filtering = {
+        "jobs": [
+            {
+                "job_id": "J1",
+                "title": "ML Engineer",
+                "company": "Example",
+                "description": "Build models.",
+            }
+        ],
+        "preferences": {},
+    }
+
+    with pytest.raises(ToolExecutionError, match="unknown tool"):
+        validate_model_tool_call(
+            ModelToolCall(name="not_registered", arguments={}),
+            expected_tool="filtering",
+        )
+    with pytest.raises(ToolExecutionError, match="Illegal tool order"):
+        validate_model_tool_call(
+            ModelToolCall(name="scoring", arguments={}),
+            expected_tool="filtering",
+        )
+    with pytest.raises(ToolExecutionError, match="Malformed arguments"):
+        validate_model_tool_call(
+            ModelToolCall(
+                name="filtering",
+                arguments={**valid_filtering, "model_score": 100},
+            ),
+            expected_tool="filtering",
+        )
+
+
+def test_model_cannot_inject_deterministic_scoring_values() -> None:
+    with pytest.raises(ToolExecutionError, match="Malformed arguments"):
+        validate_model_tool_call(
+            ModelToolCall(
+                name="scoring",
+                arguments={
+                    "jobs": [],
+                    "candidate_profile": {},
+                    "ranked_jobs": [{"score": 100}],
+                },
+            ),
+            expected_tool="scoring",
+        )
+
+
+def test_graph_orchestration_dispatches_pre_review_tools_through_registry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import src.agent.graph as graph_module
+
+    calls: list[str] = []
+
+    def fake_invoke_tool(name, arguments, context=None):
+        calls.append(name)
+        if name == "filtering":
+            return FilterJobsOutput(accepted_jobs=arguments.jobs, rejected_jobs=[])
+        if name == "scoring":
+            ranked_jobs = [
+                ScoredJob(
+                    job=job,
+                    score=100 - index,
+                    score_breakdown={},
+                    rationale="fake deterministic ranking",
+                    evidence_ids=[],
+                )
+                for index, job in enumerate(arguments.jobs)
+            ]
+            return ScoreJobsOutput(
+                ranked_jobs=ranked_jobs,
+                top_3_job_ids=[job.job_id for job in arguments.jobs[:3]],
+            )
+        if name == "fit_analysis":
+            return FitAnalysisOutput(job_id=arguments.job.job_id)
+        if name == "resume_tailoring":
+            return TailorResumeOutput(
+                job_id=arguments.job.job_id,
+                status="OK",
+                output_tex_path=f"/tmp/{arguments.job.job_id}.tex",
+                output_pdf_path=f"/tmp/{arguments.job.job_id}.pdf",
+                page_count=1,
+            )
+        raise AssertionError(f"unexpected tool: {name}")
+
+    monkeypatch.setattr(graph_module, "invoke_tool", fake_invoke_tool)
+    monkeypatch.setattr(graph_module, "validate_artifact_output", lambda *_args: None)
+
+    app = build_agent_graph(
+        checkpointer=create_memory_checkpointer(),
+        tracer=TraceManager(enabled=False),
+    )
+    result = invoke_new_run(app, create_initial_state(thread_id="thread-registry"))
+
+    assert result["__interrupt__"]
+    assert calls == [
+        "filtering",
+        "scoring",
+        "fit_analysis",
+        "fit_analysis",
+        "fit_analysis",
+        "resume_tailoring",
+        "resume_tailoring",
+        "resume_tailoring",
+    ]
+
+
+# --- test_agent_phase_policy.py ---
+"""Public tool-package contracts."""
+
+
+def test_each_tool_package_exposes_one_run_callable() -> None:
+    callables = [
+        run_filtering_tool,
+        run_scoring_tool,
+        run_fit_analysis_tool,
+        run_resume_tailoring_tool,
+        run_cover_letter_tool,
+    ]
+
+    assert all(callable(tool) for tool in callables)
+    assert [tool.__name__ for tool in callables] == [
+        "run_filtering_tool",
+        "run_scoring_tool",
+        "run_fit_analysis_tool",
+        "run_resume_tailoring_tool",
+        "run_cover_letter_tool",
+    ]
+
+
+# --- test_agent_review_interrupt.py ---
+"""Human-review payload contracts."""
+
+
+def test_one_payload_contains_all_three_resumes() -> None:
+    state = {
+        "top_3_job_ids": ["J1", "J2", "J3"],
+        "jobs": [
+            {"job_id": "J1", "title": "One", "company": "A"},
+            {"job_id": "J2", "title": "Two", "company": "B"},
+            {"job_id": "J3", "title": "Three", "company": "C"},
+        ],
+        "fit_analyses": {job_id: {"job_id": job_id} for job_id in ["J1", "J2", "J3"]},
+        "tailoring_results": {
+            job_id: {
+                "output_pdf_path": f"/tmp/{job_id}.pdf",
+                "change_log": [],
+            }
+            for job_id in ["J1", "J2", "J3"]
+        },
+        "revision_round": 0,
+    }
+
+    payload = build_review_payload(state)
+
+    assert payload.review_round == 1
+    assert set(payload.resumes) == {"J1", "J2", "J3"}
+
+
+# --- test_integration_end_to_end.py ---
+"""Full workflow tests."""
+
+
+def test_graph_wiring_across_review_memory_revision_and_letters(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Exercise workflow wiring with in-memory PDF fixtures."""
+
+    monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "outputs"))
+
+    def write_pdf(path: Path) -> None:
+        writer = PdfWriter()
+        writer.add_blank_page(width=612, height=792)
+        with path.open("wb") as handle:
+            writer.write(handle)
+
+    def compile_resume(
+        text: str,
+        tex_path: Path,
+        pdf_path: Path,
+        *,
+        tracer=None,
+        trace_metadata=None,
+    ):
+        assert tracer is not None
+        with tracer.span(
+            "resume_tailoring.compile_pdf",
+            trace_metadata,
+            input={"tex_file": tex_path.name},
+        ):
+            tex_path.write_text(text, encoding="utf-8")
+            write_pdf(pdf_path)
+        with tracer.span(
+            "resume_tailoring.validate_page_count",
+            trace_metadata,
+            input={"pdf_file": pdf_path.name},
+        ):
+            pass
+        return 1, [], text
+
+    def compile_letter(
+        letter,
+        job,
+        tex_path: Path,
+        pdf_path: Path,
+        *,
+        tracer=None,
+        trace_metadata=None,
+    ):
+        assert tracer is not None
+        with tracer.span(
+            "cover_letter.compile_pdf",
+            trace_metadata,
+            input={"tex_file": tex_path.name},
+        ):
+            tex_path.write_text(
+                cover_module._render_tex(letter, job, 0), encoding="utf-8"
+            )
+            write_pdf(pdf_path)
+        with tracer.span(
+            "cover_letter.validate_page_count",
+            trace_metadata,
+            input={"pdf_file": pdf_path.name},
+        ):
+            pass
+        return 1, []
+
+    monkeypatch.setattr(tailoring_module, "_compile_one_page", compile_resume)
+    monkeypatch.setattr(cover_module, "_compile_one_page", compile_letter)
+    monkeypatch.setattr(
+        cover_module,
+        "_read_approved_resume",
+        lambda path: (
+            "Avery Morgan\nHouston, TX | avery@example.com | github.com/avery",
+            [],
+        ),
+    )
+    memory_file = tmp_path / "memory.json"
+    memory_file.write_text(
+        """
+[
+  {
+    "fact_id": "mem-old-experience",
+    "fact_type": "experience",
+    "canonical_value": "2 years of experience in data engineering",
+    "provenance": {
+      "source": "human_review",
+      "review_round": 1,
+      "original_statement": "I have 2 years of experience in data engineering.",
+      "related_job_id": "J000"
+    },
+    "created_at": "2026-01-01T00:00:00+00:00",
+    "active": true
+  }
+]
+""".strip(),
+        encoding="utf-8",
+    )
+    tracer = TraceManager(enabled=False)
+    app = build_agent_graph(
+        checkpointer=create_memory_checkpointer(),
+        tracer=tracer,
+    )
+    state = create_initial_state(
+        thread_id="thread-e2e",
+        run_id="run-e2e",
+        memory_file=str(memory_file),
+    )
+
+    first = invoke_new_run(app, state)
+    first_payload = first["__interrupt__"][0].value
+    rejected_job_id = list(first_payload["resumes"])[1]
+    first_feedback = {
+        job_id: {"decision": "approve", "comment": ""}
+        for job_id in first_payload["resumes"]
+    }
+    approved_job_id = next(
+        job_id for job_id in first_feedback if job_id != rejected_job_id
+    )
+    first_feedback[approved_job_id] = {
+        "decision": "approve",
+        "comment": "I have 5 years of experience in data engineering.",
+    }
+    first_feedback[rejected_job_id] = {
+        "decision": "reject",
+        "comment": "Add LangGraph. I have used it in previous projects.",
+    }
+
+    final = resume_run(app, "thread-e2e", first_feedback)
+    assert final["status"] == "COMPLETED", "; ".join(
+        f"{round_entry['revision_round']}:{action['job_id']}:"
+        f"{action['feedback_satisfied']}:{action['feedback_checks']}"
+        for round_entry in final["review_history"][0]["revision_rounds"]
+        for action in round_entry["actions"]
+    )
+    assert final["revision_round"] == 1
+    assert not final.get("__interrupt__")
+    assert any(fact["canonical_value"] == "LangGraph" for fact in final["memory_facts"])
+    active_experience = [
+        fact
+        for fact in final["memory_facts"]
+        if fact["fact_type"] == "experience" and fact["active"]
+    ]
+    assert [fact["canonical_value"] for fact in active_experience] == [
+        "5 years of experience in data engineering"
+    ]
+    assert any(fact["conflicts"] for fact in final["memory_facts"])
+    assert [event.name for event in tracer.events].count(
+        "memory.conflict_handling"
+    ) == 1
+    assert set(final["review_history"][0]["actions_taken"]) == {rejected_job_id}
+    revision_rounds = final["review_history"][0]["revision_rounds"]
+    assert revision_rounds[0]["review_round"] == 1
+    assert revision_rounds[0]["revision_round"] == 1
+    assert revision_rounds[0]["feedback_received_by_job"] == {
+        rejected_job_id: "Add LangGraph. I have used it in previous projects."
+    }
+    revision_action = revision_rounds[0]["actions"][0]
+    assert revision_action["job_id"] == rejected_job_id
+    assert revision_action["feedback_received"] == first_feedback[rejected_job_id][
+        "comment"
+    ]
+    assert revision_action["changes_accepted"]
+    assert revision_action["evidence_used"]
+    assert revision_action["feedback_satisfied"] is True
+    assert revision_action["changes_rejected_or_skipped"] == []
+
+    tool_names = [item["tool"] for item in final["tool_history"]]
+    assert tool_names.count("run_filtering_tool") == 1
+    assert tool_names.count("run_scoring_tool") == 1
+    assert tool_names.count("run_fit_analysis_tool") == 3
+    assert tool_names.count("run_resume_tailoring_tool") == 4
+    assert tool_names.count("run_cover_letter_tool") == 3
+
+    assert final["status"] == "COMPLETED"
+    assert final["phase"] == "COMPLETE"
+    assert len(final["cover_letter_results"]) == 3
+    assert not final["errors"]
+    assert final["trace_id"] == "trace-run-e2e"
+    assert [event.name for event in tracer.events].count("job_search_agent_run") == 1
+    assert [event.name for event in tracer.events].count("memory.read") == 1
+    assert [event.name for event in tracer.events].count("memory.write") == 1
+    assert [event.name for event in tracer.events].count("tool_registry.dispatch") == 12
+    assert final["output_manifest"]["job_ids"] == final["top_3_job_ids"]
+    assert final["output_manifest"]["run_id"] == "run-e2e"
+    assert Path(final["output_manifest"]["output_root"]).name == "run-e2e"
+    resume_compile_events = [
+        event for event in tracer.events if event.name == "resume_tailoring.compile_pdf"
+    ]
+    assert len(resume_compile_events) >= 4
+    cover_compile_events = [
+        event for event in tracer.events if event.name == "cover_letter.compile_pdf"
+    ]
+    assert len(cover_compile_events) >= 3
+    assert len(final["fit_analysis_artifacts"]) == 3
+    assert all(
+        Path(path).is_file()
+        for paths in final["fit_analysis_artifacts"].values()
+        for path in paths.values()
+    )
+    ambiguous_tool_names = {
+        "filter_jobs",
+        "score_jobs",
+        "analyze_fit",
+        "tailor_resume",
+        "generate_cover_letter",
+    }
+    names = [event.name for event in tracer.events]
+    assert not any(
+        names.count(name) > 1 and not name.endswith(("_job_1", "_job_2", "_job_3"))
+        for name in ambiguous_tool_names
+    )
+    assert {event.trace_id for event in tracer.events} == {"trace-run-e2e"}
+    assert [event.name for event in tracer.events].count("human_review_pause") == 1
+
+
+# --- test_integration_output_contract.py ---
+"""Canonical Top-3 output writing and validation."""
+
+
+def _integration_output_write_one_page_pdf(path: Path) -> None:
+    writer = PdfWriter()
+    writer.add_blank_page(width=612, height=792)
+    with path.open("wb") as handle:
+        writer.write(handle)
+
+
+def test_output_writer_produces_and_validates_three_complete_job_folders(
+    tmp_path: Path, monkeypatch
+) -> None:
+    output_dir = tmp_path / "outputs"
+    monkeypatch.setenv("OUTPUT_DIR", str(output_dir))
+    job_ids = ["J1", "J2", "J3"]
+    tailoring = {}
+    letters = {}
+    fit_artifacts = {}
+
+    for job_id in job_ids:
+        job_dir = output_dir / job_id
+        job_dir.mkdir(parents=True)
+        _integration_output_write_one_page_pdf(job_dir / "resume_before.pdf")
+        _integration_output_write_one_page_pdf(job_dir / "approved.pdf")
+        _integration_output_write_one_page_pdf(job_dir / "letter.pdf")
+        (job_dir / "approved.tex").write_text("resume source", encoding="utf-8")
+        (job_dir / "letter.tex").write_text("letter source", encoding="utf-8")
+        fit_path = job_dir / "fit_analysis.md"
+        fit_path.write_text(f"# Fit analysis for {job_id}\n", encoding="utf-8")
+        (job_dir / "resume.aux").write_text("temporary", encoding="utf-8")
+        tailoring[job_id] = {
+            "output_pdf_path": str(job_dir / "approved.pdf"),
+            "output_tex_path": str(job_dir / "approved.tex"),
+            "change_log": [],
+        }
+        letters[job_id] = {
+            "output_pdf_path": str(job_dir / "letter.pdf"),
+            "output_tex_path": str(job_dir / "letter.tex"),
+        }
+        fit_artifacts[job_id] = {"markdown_path": str(fit_path)}
+
+    state = {
+        "top_3_job_ids": job_ids,
+        "jobs": [
+            {
+                "job_id": job_id,
+                "title": "ML Engineer",
+                "company": f"Company {job_id}",
+                "description": "Build ML systems.",
+            }
+            for job_id in job_ids
+        ],
+        "tailoring_results": tailoring,
+        "cover_letter_results": letters,
+        "fit_analysis_artifacts": fit_artifacts,
+    }
+
+    manifest = write_and_validate_outputs(state)
+
+    assert manifest["job_ids"] == job_ids
+    assert {path.name for path in output_dir.iterdir() if path.is_dir()} == set(job_ids)
+    for job_id in job_ids:
+        job_dir = output_dir / job_id
+        assert all((job_dir / name).is_file() for name in MANDATORY_JOB_FILES)
+        assert not (job_dir / "resume.aux").exists()
+
+
+def test_output_writer_isolates_artifacts_by_run_id(
+    tmp_path: Path, monkeypatch
+) -> None:
+    output_dir = tmp_path / "outputs"
+    monkeypatch.setenv("OUTPUT_DIR", str(output_dir))
+    job_ids = ["J1", "J2", "J3"]
+
+    def state_for(run_id: str) -> dict[str, object]:
+        tailoring = {}
+        letters = {}
+        fit_artifacts = {}
+        for job_id in job_ids:
+            job_dir = output_dir / run_id / job_id
+            job_dir.mkdir(parents=True)
+            _integration_output_write_one_page_pdf(job_dir / "resume_before.pdf")
+            _integration_output_write_one_page_pdf(job_dir / "approved.pdf")
+            _integration_output_write_one_page_pdf(job_dir / "letter.pdf")
+            (job_dir / "approved.tex").write_text(f"resume {run_id}", encoding="utf-8")
+            (job_dir / "letter.tex").write_text(f"letter {run_id}", encoding="utf-8")
+            fit_path = job_dir / "fit_analysis.md"
+            fit_path.write_text(f"# {run_id} {job_id}\n", encoding="utf-8")
+            tailoring[job_id] = {
+                "output_pdf_path": str(job_dir / "approved.pdf"),
+                "output_tex_path": str(job_dir / "approved.tex"),
+                "change_log": [],
+            }
+            letters[job_id] = {
+                "output_pdf_path": str(job_dir / "letter.pdf"),
+                "output_tex_path": str(job_dir / "letter.tex"),
+            }
+            fit_artifacts[job_id] = {"markdown_path": str(fit_path)}
+        memory_file = output_dir / run_id / "memory.json"
+        memory_file.write_text("[]", encoding="utf-8")
+        return {
+            "run_id": run_id,
+            "memory_file": str(memory_file),
+            "trace_id": f"trace-{run_id}",
+            "top_3_job_ids": job_ids,
+            "jobs": [
+                {
+                    "job_id": job_id,
+                    "title": "ML Engineer",
+                    "company": f"Company {job_id}",
+                    "description": "Build ML systems.",
+                }
+                for job_id in job_ids
+            ],
+            "tailoring_results": tailoring,
+            "cover_letter_results": letters,
+            "fit_analysis_artifacts": fit_artifacts,
+            "trace_events": [{"name": run_id}],
+        }
+
+    first = write_and_validate_outputs(state_for("run-a"))
+    second = write_and_validate_outputs(state_for("run-b"))
+
+    assert Path(first["output_root"]) == output_dir / "run-a"
+    assert Path(second["output_root"]) == output_dir / "run-b"
+    assert (output_dir / "run-a" / "run_manifest.json").is_file()
+    assert (output_dir / "run-b" / "run_manifest.json").is_file()
+    assert (output_dir / "run-a" / "J1" / "resume_after.tex").read_text(
+        encoding="utf-8"
+    ) == "resume run-a"
+    assert (output_dir / "run-b" / "J1" / "resume_after.tex").read_text(
+        encoding="utf-8"
+    ) == "resume run-b"
+
+
+# --- test_integration_real_pdflatex_end_to_end.py ---
+"""Workflow integration test using real LaTeX and PDF extraction."""
+
+
+@pytest.mark.skipif(
+    shutil.which("pdflatex") is None,
+    reason="pdflatex is not installed; real PDF generation cannot be exercised",
+)
+def test_real_pdflatex_complete_workflow_with_review_memory_and_revision(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Run all real business tools; only the controller uses the explicit test policy."""
+
+    output_dir = tmp_path / "outputs"
+    memory_file = output_dir / "memory.json"
+    monkeypatch.setenv("OUTPUT_DIR", str(output_dir))
+    tracer = TraceManager(enabled=False)
+    checkpointer, context = create_sqlite_checkpointer(
+        output_dir / "checkpoints.sqlite"
+    )
+    try:
+        app = build_agent_graph(
+            checkpointer=checkpointer,
+            tracer=tracer,
+        )
+        state = create_initial_state(
+            thread_id="thread-real-pdflatex",
+            run_id="run-real-pdflatex",
+            memory_file=str(memory_file),
+        )
+
+        waiting = invoke_new_run(app, state)
+        payload = waiting["__interrupt__"][0].value
+        feedback = {
+            job_id: {"decision": "approve", "comment": ""}
+            for job_id in payload["resumes"]
+        }
+        feedback["J028"] = {
+            "decision": "reject",
+            "comment": "Add LangGraph. I have used it in previous projects.",
+        }
+        thread_id = state.get("thread_id")
+        assert thread_id is not None
+        final = resume_run(app, thread_id, feedback)
+    finally:
+        context.__exit__(None, None, None)
+
+    assert final["status"] == "COMPLETED"
+    assert final["revision_round"] == 1
+    assert len(final["review_history"]) == 1
+    assert [event.name for event in tracer.events].count("human_review_pause") == 1
+    assert any(fact["canonical_value"] == "LangGraph" for fact in final["memory_facts"])
+    for job_id in final["top_3_job_ids"]:
+        resume = final["tailoring_results"][job_id]
+        letter = final["cover_letter_results"][job_id]
+        assert len(PdfReader(resume["output_pdf_path"]).pages) == 1
+        assert len(PdfReader(letter["output_pdf_path"]).pages) == 1
+        assert Path(resume["output_tex_path"]).is_file()
+        assert Path(letter["output_tex_path"]).is_file()

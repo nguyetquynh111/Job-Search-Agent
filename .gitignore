@@ -186,6 +186,11 @@ cython_debug/
 # Job Search Agent local runtime artifacts
 outputs/*
 !outputs/.gitkeep
+*.aux
+*.fdb_latexmk
+*.fls
+*.synctex.gz
+*.toc
 
 # PyCharm
 #   JetBrains specific template is maintained in a separate JetBrains.gitignore that can
