@@ -103,14 +103,13 @@ def _check_latex(errors: list[str]) -> None:
         )
         if result.returncode != 0 or not (root / "preflight.pdf").is_file():
             tail = "\n".join((result.stdout or result.stderr).splitlines()[-8:])
-            errors.append(f"pdflatex package smoke test failed: {tail}")
+            errors.append(f"pdflatex package compilation check failed: {tail}")
 
 
 def run_preflight(
     *,
     repo_root: Path,
     output_dir: Path,
-    require_langfuse: bool,
 ) -> list[str]:
     """Return every discovered production-blocking error."""
 
@@ -134,21 +133,17 @@ def run_preflight(
     if not os.getenv("LLM_MODEL") or not os.getenv("DEEPINFRA_API_KEY"):
         errors.append("LLM_MODEL and DEEPINFRA_API_KEY are required")
     langfuse_values = {
-        "LANGFUSE_PUBLIC_KEY": os.getenv("LANGFUSE_PUBLIC_KEY", ""),
-        "LANGFUSE_SECRET_KEY": os.getenv("LANGFUSE_SECRET_KEY", ""),
+        "LANGFUSE_PUBLIC_KEY": os.getenv("LANGFUSE_PUBLIC_KEY", "").strip(),
+        "LANGFUSE_SECRET_KEY": os.getenv("LANGFUSE_SECRET_KEY", "").strip(),
         "LANGFUSE_HOST": (
             os.getenv("LANGFUSE_HOST")
             or os.getenv("LANGFUSE_BASE_URL")
             or "https://us.cloud.langfuse.com"
-        ),
+        ).strip(),
     }
-    tracing_configured = any(langfuse_values.values())
-    if require_langfuse or tracing_configured:
-        missing = [key for key, value in langfuse_values.items() if not value]
-        if missing:
-            errors.append(
-                "connected Langfuse tracing requires: " + ", ".join(missing)
-            )
+    missing = [key for key, value in langfuse_values.items() if not value]
+    if missing:
+        errors.append("connected Langfuse tracing requires: " + ", ".join(missing))
     for relative in REQUIRED_FIXTURES:
         path = repo_root / relative
         if not path.is_file() or not os.access(path, os.R_OK):
@@ -165,7 +160,6 @@ def run_preflight(
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--require-langfuse", action="store_true")
     parser.add_argument("--output-dir", default=os.getenv("OUTPUT_DIR", "outputs"))
     args = parser.parse_args()
     repo_root = Path(__file__).resolve().parents[1]
@@ -174,7 +168,6 @@ def main() -> int:
         output_dir=(repo_root / args.output_dir).resolve()
         if not Path(args.output_dir).is_absolute()
         else Path(args.output_dir),
-        require_langfuse=args.require_langfuse,
     )
     if errors:
         print("Production preflight FAILED:")

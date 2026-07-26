@@ -103,22 +103,22 @@ def test_valid_langfuse_configuration_selects_real_tracer(monkeypatch) -> None:
     assert instances[0].host == DEFAULT_LANGFUSE_HOST
 
 
-def test_missing_langfuse_credentials_select_noop_tracer(caplog) -> None:
-    """Missing keys keep observability local."""
+def test_missing_langfuse_credentials_fail_fast() -> None:
+    """Default tracing requires connected Langfuse credentials."""
 
-    caplog.set_level(logging.INFO)
+    with pytest.raises(RuntimeError) as exc_info:
+        TraceManager()
 
-    tracer = TraceManager()
+    message = str(exc_info.value)
+    assert "Langfuse credentials are required" in message
+    assert "LANGFUSE_PUBLIC_KEY" in message
+    assert "LANGFUSE_SECRET_KEY" in message
 
-    assert tracer.enabled is False
-    assert tracer.status_message == STATUS_NOOP
-    assert "Langfuse disabled because configuration is missing" in caplog.text
 
-
-def test_langfuse_initialization_failure_selects_noop_tracer(
+def test_langfuse_initialization_failure_fails_fast(
     monkeypatch, caplog
 ) -> None:
-    """SDK initialization errors fall back without exposing exception details."""
+    """SDK initialization errors stop startup without exposing details."""
 
     class FailingLangfuse:
         def __init__(self, public_key: str, secret_key: str, host: str) -> None:
@@ -132,11 +132,10 @@ def test_langfuse_initialization_failure_selects_noop_tracer(
     monkeypatch.setenv("LANGFUSE_HOST", DEFAULT_LANGFUSE_HOST)
     caplog.set_level(logging.WARNING)
 
-    tracer = TraceManager()
+    with pytest.raises(RuntimeError, match="connected tracing is required"):
+        TraceManager()
 
-    assert tracer.enabled is False
-    assert tracer.status_message == STATUS_UNAVAILABLE
-    assert "Langfuse initialization failed; using no-op tracing" in caplog.text
+    assert "Langfuse initialization failed" in caplog.text
 
 
 def test_tracing_failure_does_not_terminate_agent_workflow(
@@ -428,9 +427,10 @@ def test_sensitive_credentials_do_not_appear_in_logs_or_status(
     monkeypatch.setenv("LANGFUSE_HOST", DEFAULT_LANGFUSE_HOST)
     caplog.set_level(logging.WARNING)
 
-    tracer = TraceManager()
+    with pytest.raises(RuntimeError) as exc_info:
+        TraceManager()
 
     assert public_key not in caplog.text
     assert secret_key not in caplog.text
-    assert public_key not in tracer.status_message
-    assert secret_key not in tracer.status_message
+    assert public_key not in str(exc_info.value)
+    assert secret_key not in str(exc_info.value)

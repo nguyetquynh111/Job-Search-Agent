@@ -99,30 +99,40 @@ def test_change_views_extract_supported_resume_sections(tmp_path: Path) -> None:
     after = tmp_path / "after.tex"
     before.write_text(
         """
-% AGENT-EDIT-TARGET: summary
+\\section{Summary}
 Old summary.
-% AGENT-EDIT-TARGET: experience-bullet-1
+\\section{Professional Experience}
+\\begin{itemize}
 \\resumeItem{Old first bullet.}
-% AGENT-EDIT-TARGET: experience-bullet-2
 \\resumeItem{Old second bullet.}
-% AGENT-EDIT-TARGET: skills
+\\end{itemize}
+\\section{Technical Skills}
 \\begin{itemize}
   \\small\\item{Python}
+\\end{itemize}
+\\section{Selected Projects}
+\\begin{itemize}
+  \\item \\textbf{Example Project}
 \\end{itemize}
 """,
         encoding="utf-8",
     )
     after.write_text(
         """
-% AGENT-EDIT-TARGET: summary
+\\section{Summary}
 New summary.
-% AGENT-EDIT-TARGET: experience-bullet-1
+\\section{Professional Experience}
+\\begin{itemize}
 \\resumeItem{New first bullet.}
-% AGENT-EDIT-TARGET: experience-bullet-2
 \\resumeItem{New second bullet.}
-% AGENT-EDIT-TARGET: skills
+\\end{itemize}
+\\section{Technical Skills}
 \\begin{itemize}
   \\small\\item{Python, SQL}
+\\end{itemize}
+\\section{Selected Projects}
+\\begin{itemize}
+  \\item \\textbf{Example Project}
 \\end{itemize}
 """,
         encoding="utf-8",

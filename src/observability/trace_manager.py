@@ -1,4 +1,4 @@
-"""Langfuse v2 tracing with local no-op fallback and privacy sanitization."""
+"""Langfuse v2 tracing with explicit offline mode and privacy sanitization."""
 
 from __future__ import annotations
 

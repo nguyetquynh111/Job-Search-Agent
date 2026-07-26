@@ -6,6 +6,7 @@ import inspect
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from collections.abc import Callable
 
 from src.config import get_config
 from src.observability.trace_manager import TraceManager
@@ -28,9 +29,18 @@ from src.tools.job_evidence import (
     job_evidence_id,
     job_skill_evidence_id,
 )
+from src.tools.resume_tailoring.latex_structure import (
+    LatexItem,
+    LatexStructureError,
+    ProjectEntry,
+    ResumeStructure,
+    TextRange,
+    balanced_brace_content,
+    latex_to_plain,
+    parse_resume_structure,
+)
 
-MAX_COMPILE_ATTEMPTS = 1
-EXPERIENCE_TARGETS = ("experience-bullet-1", "experience-bullet-2")
+MAX_COMPILE_ATTEMPTS = 3
 
 
 class TailoringError(RuntimeError):
@@ -48,6 +58,16 @@ class PortfolioRecord:
     domain: str
     summary: str
     evidence_id: str
+
+
+@dataclass(frozen=True)
+class SourceEdit:
+    """A single authorized replacement in the original uploaded source."""
+
+    target: TextRange
+    replacement: str
+    category: str
+    location: str
 
 
 def tailor_resume(
@@ -111,16 +131,27 @@ def tailor_resume(
                 "revision_requested": bool(inp.revision_feedback),
             },
         ) as editing_span:
-            updated = source
+            structure = parse_resume_structure(
+                source,
+                require_projects=inp.fit_analysis.project_swap is not None,
+            )
+            edits: list[SourceEdit] = []
             changes: list[ChangeLogEntry] = []
 
-            old_summary = _summary_text(updated)
+            old_summary = structure.summary_range.text(source)
             summary, summary_ids = _build_summary(inp, evidence)
             summary_ids = list(
                 dict.fromkeys([job_evidence_id(inp.job, "title"), *summary_ids])
             )
-            updated = _replace_summary(updated, summary)
             if old_summary.strip() != summary.strip():
+                edits.append(
+                    SourceEdit(
+                        structure.summary_range,
+                        summary,
+                        "summary",
+                        f"{structure.sections['summary'].title.title()} section",
+                    )
+                )
                 changes.append(
                     ChangeLogEntry(
                         change_id=f"{inp.job.job_id}-summary",
@@ -133,24 +164,48 @@ def tailor_resume(
                             "only job-posting and candidate evidence."
                         ),
                         evidence_ids=summary_ids,
+                        source_location=(
+                            f"{structure.sections['summary'].title.title()} section"
+                        ),
+                        validation_result="pending structural and evidence validation",
                     )
                 )
+            elif not inp.revision_feedback:
+                raise TailoringError(
+                    "The proposed Professional Summary is identical to the existing "
+                    "summary; a real rewrite is required."
+                )
 
-            for index, marker in enumerate(EXPERIENCE_TARGETS, start=1):
-                old_bullet = _command_argument_after_marker(
-                    updated, marker, "resumeItem"
-                )
+            selected_bullets = _select_experience_bullets(
+                structure, inp, evidence
+            )
+            selected_ordinals = [item.ordinal for item, _ in selected_bullets]
+            for index, (bullet, bullet_evidence) in enumerate(
+                selected_bullets, start=1
+            ):
+                old_bullet = bullet.content(source)
                 new_bullet, evidence_ids = _rewrite_experience_bullet(
-                    old_bullet, index, inp, evidence
+                    old_bullet,
+                    index,
+                    inp,
+                    evidence,
+                    evidence_item=bullet_evidence,
                 )
-                updated = _replace_command_after_marker(
-                    updated, marker, "resumeItem", new_bullet
+                edits.append(
+                    SourceEdit(
+                        bullet.content_range,
+                        new_bullet,
+                        "experience",
+                        f"Experience bullet {bullet.ordinal}",
+                    )
                 )
                 changes.append(
                     ChangeLogEntry(
                         change_id=f"{inp.job.job_id}-experience-{index}",
                         section="experience",
-                        description=f"Rewrote experience bullet {index}.",
+                        description=(
+                            f"Rewrote existing experience bullet {bullet.ordinal}."
+                        ),
                         before_text=old_bullet,
                         after_text=new_bullet,
                         reason=(
@@ -158,36 +213,62 @@ def tailor_resume(
                             "evidenced job requirements without changing its facts."
                         ),
                         evidence_ids=evidence_ids,
+                        source_location=f"Experience bullet {bullet.ordinal}",
+                        validation_result="pending structural and evidence validation",
                     )
                 )
 
-            skills_before = _skills_line(updated)
-            updated, added_skills, skill_ids = _add_evidenced_skills(
-                updated, inp, evidence
+            (
+                skill_edit,
+                added_skills,
+                skill_ids,
+                skill_evidence,
+            ) = _plan_evidenced_skill_edit(
+                source, structure, inp, evidence
             )
-            if added_skills:
-                changes.append(
-                    ChangeLogEntry(
-                        change_id=f"{inp.job.job_id}-skills",
-                        section="skills",
-                        description=(
-                            f"Added evidenced skills: {', '.join(added_skills)}."
-                        ),
-                        before_text=skills_before,
-                        after_text=_skills_line(updated),
-                        reason=(
-                            "Surface job-relevant skills already supported by "
-                            "candidate evidence."
-                        ),
-                        evidence_ids=skill_ids,
+            if skill_edit is not None:
+                edits.append(skill_edit)
+                incremental_before = skill_edit.target.text(source)
+                for skill_index, skill in enumerate(added_skills, start=1):
+                    separator = (
+                        ""
+                        if incremental_before.rstrip().endswith((",", ";"))
+                        else ","
                     )
-                )
+                    incremental_after = (
+                        incremental_before.rstrip()
+                        + separator
+                        + " "
+                        + _escape_latex(skill)
+                    )
+                    changes.append(
+                        ChangeLogEntry(
+                            change_id=(
+                                f"{inp.job.job_id}-skills-{skill_index}"
+                            ),
+                            section="skills",
+                            description=f"Added evidenced skill: {skill}.",
+                            before_text=incremental_before,
+                            after_text=incremental_after,
+                            reason=(
+                                "Surface a job-relevant skill already supported by "
+                                "candidate evidence."
+                            ),
+                            evidence_ids=skill_evidence[skill],
+                            source_location=skill_edit.location,
+                            validation_result=(
+                                "pending structural and evidence validation"
+                            ),
+                        )
+                    )
+                    incremental_before = incremental_after
 
             if inp.fit_analysis.project_swap is not None:
-                updated, record, project_changed = _apply_project_swap(
-                    updated, inp, evidence
+                project_edit, record = _plan_project_swap(
+                    source, structure, inp, evidence
                 )
-                if project_changed:
+                if project_edit is not None:
+                    edits.append(project_edit)
                     changes.append(
                         ChangeLogEntry(
                             change_id=f"{inp.job.job_id}-project-swap",
@@ -196,10 +277,8 @@ def tailor_resume(
                                 f'Replaced "{inp.fit_analysis.project_swap.remove_project}" '
                                 f'with "{record.name}".'
                             ),
-                            before_text=(
-                                inp.fit_analysis.project_swap.remove_project or ""
-                            ),
-                            after_text=record.name,
+                            before_text=project_edit.target.text(source),
+                            after_text=project_edit.replacement,
                             reason=inp.fit_analysis.project_swap.rationale,
                             evidence_ids=list(
                                 dict.fromkeys(
@@ -209,18 +288,33 @@ def tailor_resume(
                                     ]
                                 )
                             ),
+                            source_location=project_edit.location,
+                            validation_result=(
+                                "pending structural and portfolio validation"
+                            ),
                         )
                     )
-            _assert_exactly_two_targeted_bullets_changed(source, updated)
+            updated = _apply_source_edits(source, edits)
+            _assert_exactly_two_experience_bullets_changed(source, updated)
             project_swap_applied = any(
                 change.section == "projects" for change in changes
             )
             _assert_only_allowed_modifications(
                 source,
                 updated,
-                project_swap_applied=project_swap_applied,
+                edits=edits,
             )
             _validate_change_log(changes, all_evidence, inp)
+            changes = [
+                change.model_copy(
+                    update={
+                        "validation_result": (
+                            "validated: source scope preserved and evidence confirmed"
+                        )
+                    }
+                )
+                for change in changes
+            ]
             active.update_span(
                 editing_span,
                 output={
@@ -234,16 +328,33 @@ def tailor_resume(
         compile_kwargs = {}
         compile_parameters = inspect.signature(_compile_one_page).parameters
         if "tracer" in compile_parameters:
-            compile_kwargs = {
+            compile_kwargs.update(
+                {
                 "tracer": active,
                 "trace_metadata": trace_metadata,
-            }
+                }
+            )
+        if "revision" in compile_parameters:
+            compile_kwargs["revision"] = lambda working, attempt: _revise_edited_content(
+                working,
+                source,
+                selected_ordinals,
+                attempt,
+            )
         page_count, compile_errors, _compiled_source = _compile_one_page(
             updated,
             tex_path,
             pdf_path,
             **compile_kwargs,
         )
+        if _compiled_source != updated:
+            _assert_exactly_two_experience_bullets_changed(source, _compiled_source)
+            changes = _refresh_change_log_after_text(
+                changes,
+                _compiled_source,
+                selected_ordinals,
+            )
+            _validate_change_log(changes, all_evidence, inp)
         success = page_count == 1 and pdf_path.is_file() and not compile_errors
         feedback_satisfied, feedback_checks = _check_revision_feedback(
             inp.revision_feedback, changes, all_evidence
@@ -260,7 +371,7 @@ def tailor_resume(
             validation_failures=[],
             errors=compile_errors,
         )
-    except TailoringError as exc:
+    except (TailoringError, LatexStructureError) as exc:
         return _failure(inp.job.job_id, [str(exc)])
     except Exception as exc:  # noqa: BLE001 - return an honest tool failure
         return _failure(inp.job.job_id, [f"Unexpected tailoring failure: {exc}"])
@@ -388,37 +499,11 @@ def _limit_sentence(text: str, limit: int = 190) -> str:
     return f"{cleaned}." if cleaned else ""
 
 
-def _replace_summary(source: str, summary: str) -> str:
-    pattern = re.compile(
-        r"(% AGENT-EDIT-TARGET: summary\s*\n)(.*?)"
-        r"(\n\s*%----------EDUCATION----------)",
-        re.DOTALL,
-    )
-    if not pattern.search(source):
-        raise TailoringError("Resume summary edit marker was not found.")
-    return pattern.sub(
-        lambda match: f"{match.group(1)}{summary}{match.group(3)}", source, count=1
-    )
-
-
 def _summary_text(source: str) -> str:
-    pattern = re.compile(
-        r"% AGENT-EDIT-TARGET: summary\s*\n(.*?)"
-        r"\n\s*%----------EDUCATION----------",
-        re.DOTALL,
-    )
-    match = pattern.search(source)
-    if not match:
-        raise TailoringError("Resume summary edit marker was not found.")
-    return match.group(1).strip()
+    """Return summary prose located from the document's section structure."""
 
-
-def _skills_line(source: str) -> str:
-    pattern = re.compile(r"(?m)^\s*\\small\\item\{\\textbf\{AI/ML:\}\s*.*?\}\s*$")
-    match = pattern.search(source)
-    if not match:
-        raise TailoringError("Resume AI/ML skills line was not found.")
-    return match.group(0).strip()
+    structure = parse_resume_structure(source)
+    return structure.summary_range.text(source).strip()
 
 
 def _rewrite_experience_bullet(
@@ -426,9 +511,11 @@ def _rewrite_experience_bullet(
     index: int,
     inp: TailorResumeInput,
     evidence: dict[str, EvidenceItem],
+    *,
+    evidence_item: EvidenceItem | None = None,
 ) -> tuple[str, list[str]]:
     preferred_id = f"resume-experience-{index:03d}"
-    item = evidence.get(preferred_id)
+    item = evidence_item or evidence.get(preferred_id)
     if item is None:
         candidates = [
             candidate
@@ -514,11 +601,17 @@ def _rewrite_experience_bullet(
     )
 
 
-def _add_evidenced_skills(
+def _plan_evidenced_skill_edit(
     source: str,
+    structure: ResumeStructure,
     inp: TailorResumeInput,
     evidence: dict[str, EvidenceItem],
-) -> tuple[str, list[str], list[str]]:
+) -> tuple[
+    SourceEdit | None,
+    list[str],
+    list[str],
+    dict[str, list[str]],
+]:
     candidates: list[tuple[str, list[str]]] = []
     for claim in inp.fit_analysis.evidenced_missing_skills:
         skill = claim.claim.split(":", 1)[0].strip()
@@ -556,9 +649,11 @@ def _add_evidenced_skills(
                 )
             )
 
-    existing_plain = _latex_to_plain(source)
+    skills_section = structure.sections["skills"].content_range.text(source)
+    existing_plain = _latex_to_plain(skills_section)
     additions: list[str] = []
     evidence_ids: list[str] = []
+    evidence_by_skill: dict[str, list[str]] = {}
     seen = {
         canonicalize(match)
         for match in re.split(r"[,;\n]", existing_plain)
@@ -575,28 +670,45 @@ def _add_evidenced_skills(
         seen.add(canonical)
         additions.append(skill)
         evidence_ids.extend(ids)
+        evidence_by_skill[skill] = list(dict.fromkeys(ids))
 
     if not additions:
-        return source, [], []
+        return None, [], [], {}
 
-    pattern = re.compile(r"(?m)^(\s*\\small\\item\{\\textbf\{AI/ML:\}\s*)(.*?)(\}\s*)$")
-    match = pattern.search(source)
-    if not match:
-        raise TailoringError("Resume AI/ML skills line was not found.")
-    values = match.group(2).rstrip()
-    replacement = (
-        f"{match.group(1)}{values}, "
-        f"{', '.join(_escape_latex(value) for value in additions)}{match.group(3)}"
+    target = max(
+        structure.skill_items,
+        key=lambda item: sum(
+            skill_in_text(canonicalize(skill), item.content(source))
+            for skill in additions
+        ),
     )
-    updated = source[: match.start()] + replacement + source[match.end() :]
-    return updated, additions, list(dict.fromkeys(evidence_ids))
+    old_content = target.content(source)
+    separator = "" if old_content.rstrip().endswith((",", ";")) else ","
+    replacement = (
+        old_content.rstrip()
+        + separator
+        + " "
+        + ", ".join(_escape_latex(value) for value in additions)
+    )
+    return (
+        SourceEdit(
+            target.content_range,
+            replacement,
+            "skills",
+            f"Skills item {target.ordinal}",
+        ),
+        additions,
+        list(dict.fromkeys(evidence_ids)),
+        evidence_by_skill,
+    )
 
 
-def _apply_project_swap(
+def _plan_project_swap(
     source: str,
+    structure: ResumeStructure,
     inp: TailorResumeInput,
     evidence: dict[str, EvidenceItem],
-) -> tuple[str, PortfolioRecord, bool]:
+) -> tuple[SourceEdit | None, PortfolioRecord]:
     swap = inp.fit_analysis.project_swap
     if swap is None:
         raise TailoringError("Project swap was unexpectedly absent.")
@@ -618,38 +730,321 @@ def _apply_project_swap(
             f'Project "{swap.add_project}" has no matching portfolio evidence.'
         )
     record = _portfolio_record(item, expected_name=swap.add_project)
-    rendered_add_name = _escape_latex(record.name)
-    if f"\\resumeEntry{{{rendered_add_name}}}" in source:
-        return source, record, False
+    if any(
+        entry.name.casefold() == record.name.casefold()
+        for entry in structure.project_entries
+    ):
+        return None, record
     if not swap.remove_project:
         raise TailoringError(
             "Project swap does not identify a resume project to remove."
         )
 
-    entry_token = f"\\resumeEntry{{{swap.remove_project}}}"
-    entry_index = source.find(entry_token)
-    if entry_index < 0:
+    matching_entries = [
+        entry
+        for entry in structure.project_entries
+        if entry.name.casefold() == swap.remove_project.casefold()
+    ]
+    if len(matching_entries) != 1:
         raise TailoringError(
-            f'Resume project "{swap.remove_project}" was not found at a swap target.'
+            f'Resume project "{swap.remove_project}" was not found uniquely in the '
+            "Projects section."
         )
-    marker_index = source.rfind("% AGENT-SWAP-TARGET:", 0, entry_index)
-    if marker_index < 0:
+    entry = matching_entries[0]
+    replacement = _render_project_like_existing(source, entry, record)
+    return (
+        SourceEdit(
+            entry.block_range,
+            replacement,
+            "projects",
+            f'Projects entry "{entry.name}"',
+        ),
+        record,
+    )
+
+
+def _render_project_like_existing(
+    source: str, entry: ProjectEntry, record: PortfolioRecord
+) -> str:
+    """Fill an existing project entry while retaining its exact LaTeX skeleton."""
+
+    if len(entry.bullets) != 1:
         raise TailoringError(
-            f'Resume project "{swap.remove_project}" is not inside a swap target.'
+            "The selected project entry must have one descriptive bullet so its "
+            "format can be preserved safely."
         )
-    block_start = source.rfind("\n", 0, marker_index) + 1
-    next_marker = source.find("% AGENT-SWAP-TARGET:", entry_index + len(entry_token))
-    section_end = source.find("\n\\resumeEntryListEnd", entry_index + len(entry_token))
-    candidate_ends = [value for value in (next_marker, section_end) if value >= 0]
-    if not candidate_ends:
-        raise TailoringError("Could not locate the end of the resume project block.")
-    block_end = min(candidate_ends)
-    if next_marker >= 0 and block_end == next_marker:
-        block_end = source.rfind("\n", 0, next_marker) + 1
-    marker_line = source[marker_index : source.find("\n", marker_index)]
-    target_name = marker_line.partition(":")[2].split("|", 1)[0].strip()
-    replacement = _render_project(record, target_name)
-    return source[:block_start] + replacement + source[block_end:], record, True
+    block = entry.block_range.text(source)
+    if entry.command == "resumeEntry":
+        if len(entry.field_ranges) != 4:
+            raise TailoringError(
+                "The selected project macro does not expose four existing header "
+                "fields, so it cannot be populated safely."
+            )
+        replacements = [
+            (entry.field_ranges[0], _escape_latex(record.name)),
+            (entry.field_ranges[1], _escape_latex(record.period)),
+            (
+                entry.field_ranges[2],
+                _escape_latex(", ".join(record.technologies[:6])),
+            ),
+            (entry.field_ranges[3], _escape_latex(record.domain)),
+            (entry.bullets[0].content_range, _escape_latex(record.summary)),
+        ]
+    else:
+        if len(entry.field_ranges) != 1:
+            raise TailoringError("The standard project item has no unique title field.")
+        replacements = [
+            (entry.field_ranges[0], _escape_latex(record.name)),
+            (entry.bullets[0].content_range, _escape_latex(record.summary)),
+        ]
+        header_end = entry.bullets[0].block_range.start
+        header = source[entry.field_ranges[0].end:header_end]
+        technology_match = re.search(
+            r"\\(?:emph|textit)\s*\{", header
+        )
+        if technology_match:
+            opening = (
+                entry.field_ranges[0].end + technology_match.end() - 1
+            )
+            _, argument_end = _balanced_brace_content(source, opening)
+            replacements.append(
+                (
+                    TextRange(opening + 1, argument_end - 1),
+                    _escape_latex(", ".join(record.technologies[:6])),
+                )
+            )
+        period_match = re.search(
+            r"\b(?:19|20)\d{2}(?:\s*--\s*(?:Present|(?:19|20)\d{2}))?\b",
+            header,
+            re.IGNORECASE,
+        )
+        if period_match:
+            replacements.append(
+                (
+                    TextRange(
+                        entry.field_ranges[0].end + period_match.start(),
+                        entry.field_ranges[0].end + period_match.end(),
+                    ),
+                    _escape_latex(record.period),
+                )
+            )
+    relative = [
+        SourceEdit(
+            TextRange(
+                target.start - entry.block_range.start,
+                target.end - entry.block_range.start,
+            ),
+            value,
+            "projects",
+            entry.name,
+        )
+        for target, value in replacements
+    ]
+    return _apply_source_edits(block, relative)
+
+
+def _apply_source_edits(source: str, edits: list[SourceEdit]) -> str:
+    """Apply non-overlapping source ranges without touching any other byte."""
+
+    ordered = sorted(edits, key=lambda edit: edit.target.start)
+    cursor = 0
+    parts: list[str] = []
+    for edit in ordered:
+        if (
+            edit.target.start < cursor
+            or edit.target.start < 0
+            or edit.target.end < edit.target.start
+            or edit.target.end > len(source)
+        ):
+            raise TailoringError(
+                f"Authorized {edit.category} edit ranges overlap or are invalid."
+            )
+        parts.extend((source[cursor : edit.target.start], edit.replacement))
+        cursor = edit.target.end
+    parts.append(source[cursor:])
+    return "".join(parts)
+
+
+def _select_experience_bullets(
+    structure: ResumeStructure,
+    inp: TailorResumeInput,
+    evidence: dict[str, EvidenceItem],
+) -> list[tuple[LatexItem, EvidenceItem]]:
+    """Choose two structurally valid bullets with matching resume evidence."""
+
+    experience_evidence = [
+        item
+        for item in evidence.values()
+        if item.source == "resume"
+        and "experience" in {tag.casefold() for tag in item.tags}
+    ]
+    if len(experience_evidence) < 2:
+        raise TailoringError(
+            "At least two resume experience evidence records are required to "
+            "rewrite exactly two existing bullets."
+        )
+    job_skills = [
+        claim.claim.split(":", 1)[0].strip()
+        for claim in [
+            *inp.fit_analysis.aligned_skills,
+            *inp.fit_analysis.evidenced_missing_skills,
+        ]
+    ]
+    ranked: list[tuple[float, int, LatexItem, EvidenceItem]] = []
+    for bullet in structure.experience_bullets:
+        text = bullet.content(structure.source)
+        best: tuple[float, EvidenceItem] | None = None
+        for item in experience_evidence:
+            overlap = _token_overlap(text, item.text)
+            statement_match = evidence_supports_statement(text, item)
+            if overlap < 0.22 and not statement_match:
+                continue
+            relevance = sum(
+                evidence_supports_skill(item, skill)
+                or skill_in_text(canonicalize(skill), text)
+                for skill in job_skills
+            )
+            score = overlap * 10 + relevance * 2 + (3 if statement_match else 0)
+            if best is None or score > best[0]:
+                best = (score, item)
+        if best is not None:
+            ranked.append((best[0], -bullet.ordinal, bullet, best[1]))
+    ranked.sort(key=lambda value: (value[0], value[1]), reverse=True)
+
+    selected: list[tuple[LatexItem, EvidenceItem]] = []
+    used_evidence: set[str] = set()
+    for _, _, bullet, item in ranked:
+        if item.evidence_id in used_evidence:
+            alternative = max(
+                (
+                    candidate
+                    for candidate in experience_evidence
+                    if candidate.evidence_id not in used_evidence
+                    and (
+                        _token_overlap(bullet.content(structure.source), candidate.text)
+                        >= 0.22
+                        or evidence_supports_statement(
+                            bullet.content(structure.source), candidate
+                        )
+                    )
+                ),
+                key=lambda candidate: _token_overlap(
+                    bullet.content(structure.source), candidate.text
+                ),
+                default=None,
+            )
+            if alternative is None:
+                continue
+            item = alternative
+        selected.append((bullet, item))
+        used_evidence.add(item.evidence_id)
+        if len(selected) == 2:
+            break
+    if len(selected) != 2:
+        raise TailoringError(
+            "Could not safely match two distinct existing experience bullets to "
+            "their resume evidence."
+        )
+    return sorted(selected, key=lambda value: value[0].ordinal)
+
+
+def _token_overlap(left: str, right: str) -> float:
+    left_tokens = {
+        token
+        for token in _word_tokens(_latex_to_plain(left))
+        if len(token) > 2
+    }
+    right_tokens = {
+        token
+        for token in _word_tokens(_latex_to_plain(right))
+        if len(token) > 2
+    }
+    if not left_tokens:
+        return 0.0
+    return len(left_tokens & right_tokens) / len(left_tokens)
+
+
+def _revise_edited_content(
+    working: str,
+    original: str,
+    selected_ordinals: list[int],
+    attempt: int,
+) -> str:
+    """Shorten only newly edited prose after a multi-page compilation."""
+
+    current = parse_resume_structure(working)
+    baseline = parse_resume_structure(original)
+    limit = 150 if attempt == 1 else 105
+    edits: list[SourceEdit] = []
+    summary = current.summary_range.text(working)
+    compact_summary = _compact_prose(summary, limit + 30)
+    if compact_summary != summary:
+        edits.append(
+            SourceEdit(
+                current.summary_range,
+                compact_summary,
+                "summary",
+                "Summary overflow revision",
+            )
+        )
+    for ordinal in selected_ordinals:
+        current_item = current.experience_bullets[ordinal - 1]
+        original_item = baseline.experience_bullets[ordinal - 1]
+        current_text = current_item.content(working)
+        original_text = original_item.content(original)
+        skill_match = re.match(
+            r"^(?:Applied|Demonstrated)\s+(.+?)\s+through work that\s+",
+            current_text,
+        )
+        label = skill_match.group(1) if skill_match else "Relevant experience"
+        factual = re.split(r";", original_text, maxsplit=1)[0].strip()
+        replacement = f"{label}: {_lower_first(factual)}"
+        replacement = _compact_prose(replacement, limit)
+        if replacement == original_text.strip():
+            replacement = f"Relevant: {_lower_first(replacement)}"
+        edits.append(
+            SourceEdit(
+                current_item.content_range,
+                replacement,
+                "experience",
+                f"Experience bullet {ordinal} overflow revision",
+            )
+        )
+    return _apply_source_edits(working, edits)
+
+
+def _compact_prose(value: str, limit: int) -> str:
+    compact = " ".join(value.split())
+    sentences = re.split(r"(?<=[.!?])\s+", compact)
+    if len(sentences) > 1:
+        compact = sentences[0]
+    if len(compact) > limit:
+        compact = compact[:limit].rsplit(" ", 1)[0].rstrip(" ,;:")
+        if value.rstrip().endswith("."):
+            compact += "."
+    return compact
+
+
+def _refresh_change_log_after_text(
+    changes: list[ChangeLogEntry],
+    final: str,
+    selected_ordinals: list[int],
+) -> list[ChangeLogEntry]:
+    """Ensure the log describes the source that actually compiled."""
+
+    final_structure = parse_resume_structure(final)
+    experience_index = 0
+    refreshed: list[ChangeLogEntry] = []
+    for change in changes:
+        after_text = change.after_text
+        if change.section == "summary":
+            after_text = final_structure.summary_range.text(final)
+        elif change.section == "experience":
+            ordinal = selected_ordinals[experience_index]
+            after_text = final_structure.experience_bullets[ordinal - 1].content(final)
+            experience_index += 1
+        refreshed.append(change.model_copy(update={"after_text": after_text}))
+    return refreshed
 
 
 def _portfolio_record(item: EvidenceItem, expected_name: str) -> PortfolioRecord:
@@ -678,61 +1073,33 @@ def _portfolio_record(item: EvidenceItem, expected_name: str) -> PortfolioRecord
     )
 
 
-def _render_project(record: PortfolioRecord, target_name: str) -> str:
-    technologies = ", ".join(record.technologies[:6])
-    return (
-        f"  % AGENT-SWAP-TARGET: {target_name} | PORTFOLIO-ID: {record.project_id}\n"
-        f"  \\resumeEntry{{{_escape_latex(record.name)}}}"
-        f"{{{_escape_latex(record.period)}}}\n"
-        f"    {{{_escape_latex(technologies)}}}"
-        f"{{{_escape_latex(record.domain)}}}\n"
-        "  \\resumeItemListStart\n"
-        f"    \\resumeItem{{{_escape_latex(record.summary)}}}\n"
-        "  \\resumeItemListEnd\n\n"
+def _assert_exactly_two_experience_bullets_changed(
+    before: str, after: str
+) -> None:
+    before_items = parse_resume_structure(before).experience_bullets
+    after_items = parse_resume_structure(after).experience_bullets
+    if len(before_items) != len(after_items):
+        raise TailoringError(
+            "Tailoring added or removed an experience bullet; bullet count must "
+            "remain unchanged."
+        )
+    changed = sum(
+        old.content(before) != new.content(after)
+        for old, new in zip(before_items, after_items, strict=True)
     )
-
-
-def _assert_exactly_two_targeted_bullets_changed(before: str, after: str) -> None:
-    changed = 0
-    for marker in EXPERIENCE_TARGETS:
-        old = _command_argument_after_marker(before, marker, "resumeItem")
-        new = _command_argument_after_marker(after, marker, "resumeItem")
-        changed += old != new
     if changed != 2:
         raise TailoringError(
-            f"Tailoring must change exactly two targeted experience bullets; changed {changed}."
+            "Tailoring must replace exactly two existing experience bullets; "
+            f"changed {changed}."
         )
 
 
 def _assert_only_allowed_modifications(
-    before: str, after: str, *, project_swap_applied: bool
+    before: str, after: str, *, edits: list[SourceEdit]
 ) -> None:
-    """Prove that edits are confined to the four assignment-approved regions."""
+    """Prove byte-for-byte that all source differences came from planned ranges."""
 
-    def masked(source: str) -> str:
-        result = _replace_summary(source, "<AUTHORIZED-SUMMARY>")
-        for marker in EXPERIENCE_TARGETS:
-            result = _replace_command_after_marker(
-                result, marker, "resumeItem", "<AUTHORIZED-BULLET>"
-            )
-        result = re.sub(
-            r"(?m)^(\s*\\small\\item\{\\textbf\{AI/ML:\}\s*)(.*?)(\}\s*)$",
-            r"\1<AUTHORIZED-SKILLS>\3",
-            result,
-            count=1,
-        )
-        if project_swap_applied:
-            result = re.sub(
-                r"(%----------PROJECTS----------).*?"
-                r"(%----------SKILLS----------)",
-                r"\1\n<AUTHORIZED-PROJECTS>\n\2",
-                result,
-                count=1,
-                flags=re.DOTALL,
-            )
-        return result
-
-    if masked(before) != masked(after):
+    if _apply_source_edits(before, edits) != after:
         raise TailoringError(
             "Resume changed outside summary, exactly two experience bullets, "
             "evidenced skills, or an approved project swap."
@@ -828,13 +1195,21 @@ def _validate_change_log(
                         "not supported by the cited job requirement."
                     )
         elif change.section == "projects":
+            added_name_match = re.search(
+                r'with "([^"]+)"', change.description
+            )
+            added_name = (
+                added_name_match.group(1)
+                if added_name_match
+                else change.after_text
+            )
             if not any(
-                evidence_supports_project(item, change.after_text)
+                evidence_supports_project(item, added_name)
                 for item in candidate_items
             ):
                 raise TailoringError(
                     f"Project change {change.change_id!r} does not cite the exact "
-                    f"portfolio project {change.after_text!r}."
+                    f"portfolio project {added_name!r}."
                 )
         elif change.section == "summary":
             claimed_skills = [
@@ -1131,8 +1506,13 @@ def _job_skill_matches(skill: str, required: str) -> bool:
 
 
 def _skills_named_by_change(change: ChangeLogEntry) -> list[str]:
-    prefix = "Added evidenced skills:"
-    if prefix.casefold() not in change.description.casefold():
+    plural_prefix = "Added evidenced skills:"
+    singular_prefix = "Added evidenced skill:"
+    description = change.description.casefold()
+    if (
+        plural_prefix.casefold() not in description
+        and singular_prefix.casefold() not in description
+    ):
         return []
     _, _, values = change.description.partition(":")
     return [
@@ -1192,52 +1572,11 @@ def _meaningful_feedback_terms(feedback: str) -> set[str]:
     }
 
 
-def _command_argument_after_marker(source: str, marker: str, command: str) -> str:
-    marker_text = f"% AGENT-EDIT-TARGET: {marker}"
-    marker_index = source.find(marker_text)
-    if marker_index < 0:
-        raise TailoringError(f"Resume edit marker {marker!r} was not found.")
-    command_index = source.find(f"\\{command}", marker_index + len(marker_text))
-    if command_index < 0:
-        raise TailoringError(
-            f"Command \\{command} after marker {marker!r} was not found."
-        )
-    brace_index = source.find("{", command_index + len(command) + 1)
-    value, _ = _balanced_brace_content(source, brace_index)
-    return value
-
-
-def _replace_command_after_marker(
-    source: str, marker: str, command: str, replacement: str
-) -> str:
-    marker_text = f"% AGENT-EDIT-TARGET: {marker}"
-    marker_index = source.find(marker_text)
-    command_index = source.find(f"\\{command}", marker_index + len(marker_text))
-    brace_index = source.find("{", command_index + len(command) + 1)
-    _, end_index = _balanced_brace_content(source, brace_index)
-    return source[: brace_index + 1] + replacement + source[end_index - 1 :]
-
-
 def _balanced_brace_content(source: str, opening: int) -> tuple[str, int]:
-    if opening < 0 or opening >= len(source) or source[opening] != "{":
-        raise TailoringError("Expected a LaTeX command argument.")
-    depth = 0
-    escaped = False
-    for index in range(opening, len(source)):
-        char = source[index]
-        if escaped:
-            escaped = False
-            continue
-        if char == "\\":
-            escaped = True
-            continue
-        if char == "{":
-            depth += 1
-        elif char == "}":
-            depth -= 1
-            if depth == 0:
-                return source[opening + 1 : index], index + 1
-    raise TailoringError("Unbalanced braces in resume LaTeX.")
+    try:
+        return balanced_brace_content(source, opening)
+    except LatexStructureError as exc:
+        raise TailoringError(str(exc)) from exc
 
 
 def _compile_one_page(
@@ -1247,6 +1586,7 @@ def _compile_one_page(
     *,
     tracer: TraceManager | None = None,
     trace_metadata: dict[str, object] | None = None,
+    revision: Callable[[str, int], str] | None = None,
 ) -> tuple[int | None, list[str], str]:
     active = tracer or TraceManager(enabled=False)
     metadata = dict(trace_metadata or {})
@@ -1325,9 +1665,15 @@ def _compile_one_page(
         errors.append(
             f"Resume compiled to {page_count} pages; exactly one is required."
         )
+        if revision is not None and attempt + 1 < MAX_COMPILE_ATTEMPTS:
+            revised = revision(working, attempt + 1)
+            if revised == working:
+                break
+            working = revised
     errors.append(
-        "No automatic layout changes were made because they are outside the four "
-        "allowed resume modification types."
+        "A compliant one-page resume could not be produced within the configured "
+        "revision limit. Only newly edited content was shortened; layout, margins, "
+        "font size, spacing, and unrelated source were preserved."
     )
     return page_count, errors, working
 

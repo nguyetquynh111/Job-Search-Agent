@@ -25,6 +25,12 @@ class AppConfig:
     deepinfra_base_url: str = field(
         default_factory=lambda: os.getenv("DEEPINFRA_BASE_URL", DEEPINFRA_BASE_URL)
     )
+    langfuse_public_key: str = field(
+        default_factory=lambda: os.getenv("LANGFUSE_PUBLIC_KEY", "")
+    )
+    langfuse_secret_key: str = field(
+        default_factory=lambda: os.getenv("LANGFUSE_SECRET_KEY", "")
+    )
     output_dir: Path = field(
         default_factory=lambda: Path(os.getenv("OUTPUT_DIR", "outputs"))
     )
@@ -60,6 +66,18 @@ def validate_runtime_requirements(config: AppConfig | None = None) -> None:
     if not active.deepinfra_api_key or not active.llm_model:
         errors.append(
             "LLM_MODEL and DEEPINFRA_API_KEY are required for the single-agent controller"
+        )
+    missing_langfuse = [
+        name
+        for name, value in (
+            ("LANGFUSE_PUBLIC_KEY", active.langfuse_public_key),
+            ("LANGFUSE_SECRET_KEY", active.langfuse_secret_key),
+        )
+        if not value.strip()
+    ]
+    if missing_langfuse:
+        errors.append(
+            "Langfuse credentials are required: " + ", ".join(missing_langfuse)
         )
     if errors:
         raise RuntimeError("Runtime preflight failed: " + "; ".join(errors) + ".")

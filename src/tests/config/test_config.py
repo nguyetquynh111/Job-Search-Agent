@@ -22,9 +22,11 @@ def test_runtime_paths_are_derived_from_output_dir(
     assert config.checkpoint_db == output_dir / "checkpoints.sqlite"
 
 
-def test_runtime_preflight_requires_llm_and_pdflatex(monkeypatch) -> None:
+def test_runtime_preflight_requires_llm_pdflatex_and_langfuse(monkeypatch) -> None:
     monkeypatch.delenv("LLM_MODEL", raising=False)
     monkeypatch.delenv("DEEPINFRA_API_KEY", raising=False)
+    monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
+    monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
     monkeypatch.setattr("src.config.shutil.which", lambda executable: None)
 
     with pytest.raises(RuntimeError) as exc_info:
@@ -33,11 +35,15 @@ def test_runtime_preflight_requires_llm_and_pdflatex(monkeypatch) -> None:
     message = str(exc_info.value)
     assert "pdflatex" in message
     assert "LLM_MODEL" in message
+    assert "LANGFUSE_PUBLIC_KEY" in message
+    assert "LANGFUSE_SECRET_KEY" in message
 
 
 def test_runtime_preflight_accepts_complete_configuration(monkeypatch) -> None:
     monkeypatch.setenv("LLM_MODEL", "example/model")
     monkeypatch.setenv("DEEPINFRA_API_KEY", "test-key")
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "public-test-key")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "secret-test-key")
     monkeypatch.setattr(
         "src.config.shutil.which", lambda executable: "/usr/bin/pdflatex"
     )

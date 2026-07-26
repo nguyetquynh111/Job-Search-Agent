@@ -34,7 +34,6 @@ def test_preflight_reports_credentials_and_incomplete_langfuse(
     errors = preflight.run_preflight(
         repo_root=tmp_path,
         output_dir=tmp_path / "outputs",
-        require_langfuse=True,
     )
 
     assert any("LLM_MODEL and DEEPINFRA_API_KEY" in error for error in errors)
@@ -60,7 +59,8 @@ def test_preflight_reports_unreadable_or_missing_fixture(
     errors = preflight.run_preflight(
         repo_root=tmp_path,
         output_dir=tmp_path / "outputs",
-        require_langfuse=False,
     )
 
     assert any("data/jobs.csv" in error for error in errors)
+    assert any("LANGFUSE_PUBLIC_KEY" in error for error in errors)
+    assert any("LANGFUSE_SECRET_KEY" in error for error in errors)

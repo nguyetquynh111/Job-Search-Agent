@@ -1,4 +1,4 @@
-"""Production-like workflow smoke test using real LaTeX and PDF extraction."""
+"""Workflow integration test using real LaTeX and PDF extraction."""
 
 from __future__ import annotations
 

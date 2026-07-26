@@ -1,1 +1,1 @@
-"""Repository verification and production-smoke commands."""
+"""Repository utility commands."""

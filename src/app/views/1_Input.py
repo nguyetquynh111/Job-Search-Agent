@@ -71,7 +71,10 @@ with form_column:
             resume_upload = st.file_uploader(
                 "Resume",
                 type=["tex"],
-                help="LaTeX source file only.",
+                help=(
+                    "Compilable LaTeX with structurally identifiable summary, "
+                    "experience, skills, and projects sections."
+                ),
                 key="resume_upload",
             )
             resume_valid, resume_message = validate_uploaded_file(
@@ -133,7 +136,9 @@ with guide_column:
             """
             - **Job listings:** CSV with `job_id`, `title`, `company`, `location`,
               `remote`, `description`, and `requirements` columns.
-            - **Resume:** a `.tex` LaTeX source file.
+            - **Resume:** a compilable `.tex` file with identifiable summary,
+              experience, skills, and projects sections; standard `\\item` and
+              common resume-template macros are supported.
             - **Portfolio:** a `.txt` file; separate projects with a blank line and
               optionally add `Technologies: Python, SQL`.
             - **Preferences:** a `.yaml` file using keys such as

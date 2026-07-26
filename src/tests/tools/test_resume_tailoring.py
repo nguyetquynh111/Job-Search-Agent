@@ -14,6 +14,7 @@ from src.schemas.jobs import Job
 from src.schemas.tailoring import TailorResumeInput
 from src.tools import tailor_resume as tailoring
 from src.tools.job_evidence import build_job_evidence
+from src.tools.resume_tailoring.latex_structure import parse_resume_structure
 
 
 def _job() -> Job:
@@ -146,10 +147,16 @@ def test_tailoring_changes_only_two_targeted_experience_bullets(
         entry.evidence_ids and set(entry.evidence_ids) <= known_evidence
         for entry in result.change_log
     )
-    for marker in tailoring.EXPERIENCE_TARGETS:
-        assert tailoring._command_argument_after_marker(
-            original, marker, "resumeItem"
-        ) != tailoring._command_argument_after_marker(tailored, marker, "resumeItem")
+    before_bullets = parse_resume_structure(original).experience_bullets
+    after_bullets = parse_resume_structure(tailored).experience_bullets
+    assert len(before_bullets) == len(after_bullets)
+    assert (
+        sum(
+            before.content(original) != after.content(tailored)
+            for before, after in zip(before_bullets, after_bullets, strict=True)
+        )
+        == 2
+    )
 
 
 def test_tailoring_reports_compile_failure_honestly(

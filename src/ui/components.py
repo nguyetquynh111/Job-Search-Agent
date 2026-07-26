@@ -17,6 +17,10 @@ import streamlit.components.v1 as st_components
 
 from src.schemas.jobs import Job
 from src.tools.job_evidence import build_job_evidence
+from src.tools.resume_tailoring.latex_structure import (
+    LatexStructureError,
+    parse_resume_structure,
+)
 from src.ui.session import (
     ensure_session_defaults,
     get_checkpoint_state,
@@ -1495,58 +1499,22 @@ def render_project_swap(
     )
 
 
-def _balanced_latex_argument(source: str, command_index: int) -> str:
-    opening = source.find("{", command_index)
-    if opening < 0:
-        return ""
-    depth = 0
-    escaped = False
-    for index in range(opening, len(source)):
-        char = source[index]
-        if escaped:
-            escaped = False
-            continue
-        if char == "\\":
-            escaped = True
-            continue
-        if char == "{":
-            depth += 1
-        elif char == "}":
-            depth -= 1
-            if depth == 0:
-                return source[opening + 1 : index]
-    return ""
+def _resume_structural_values(source: str) -> dict[str, Any]:
+    """Read diff fallback values from ordinary LaTeX structure."""
 
-
-def _marker_value(source: str, marker: str, command: str | None = None) -> str:
-    marker_text = f"% AGENT-EDIT-TARGET: {marker}"
-    marker_index = source.find(marker_text)
-    if marker_index < 0:
-        return ""
-    if command:
-        command_index = source.find(f"\\{command}", marker_index + len(marker_text))
-        return _balanced_latex_argument(source, command_index)
-    tail = source[marker_index + len(marker_text) :]
-    for line in tail.splitlines():
-        stripped = line.strip()
-        if stripped and not stripped.startswith("%"):
-            return stripped
-    return ""
-
-
-def _skills_value(source: str) -> str:
-    marker = "% AGENT-EDIT-TARGET: skills"
-    start = source.find(marker)
-    if start < 0:
-        return ""
-    end = source.find("\\end{itemize}", start)
-    block = source[start + len(marker) : end if end >= 0 else None]
-    lines = [
-        _latex_to_display(line)
-        for line in block.splitlines()
-        if "\\small\\item" in line
-    ]
-    return "\n".join(line for line in lines if line)
+    if not source:
+        return {}
+    try:
+        structure = parse_resume_structure(source)
+    except LatexStructureError:
+        return {}
+    return {
+        "summary": structure.summary_range.text(source),
+        "experience": [
+            item.content(source) for item in structure.experience_bullets
+        ],
+        "skills": "\n".join(item.content(source) for item in structure.skill_items),
+    }
 
 
 def _latex_to_display(value: str) -> str:
@@ -1591,6 +1559,8 @@ def build_resume_change_views(
 
     before_source = _read_text_file(source_tex_path)
     after_source = _read_text_file(tailored_tex_path)
+    before_values = _resume_structural_values(before_source)
+    after_values = _resume_structural_values(after_source)
     views: list[dict[str, Any]] = []
     experience_index = 0
     labels = {
@@ -1606,22 +1576,27 @@ def build_resume_change_views(
         logged_before = str(change.get("before_text") or "")
         logged_after = str(change.get("after_text") or "")
         if section == "summary":
-            before = logged_before or _marker_value(before_source, "summary")
-            after = logged_after or _marker_value(after_source, "summary")
+            before = logged_before or str(before_values.get("summary") or "")
+            after = logged_after or str(after_values.get("summary") or "")
             category = labels[section]
         elif section == "experience":
             experience_index += 1
-            marker = f"experience-bullet-{experience_index}"
-            before = logged_before or _marker_value(
-                before_source, marker, "resumeItem"
+            before_items = before_values.get("experience") or []
+            after_items = after_values.get("experience") or []
+            before = logged_before or (
+                str(before_items[experience_index - 1])
+                if len(before_items) >= experience_index
+                else ""
             )
-            after = logged_after or _marker_value(
-                after_source, marker, "resumeItem"
+            after = logged_after or (
+                str(after_items[experience_index - 1])
+                if len(after_items) >= experience_index
+                else ""
             )
             category = f"Experience bullet {experience_index} of 2"
         elif section == "skills":
-            before = logged_before or _skills_value(before_source)
-            after = logged_after or _skills_value(after_source)
+            before = logged_before or str(before_values.get("skills") or "")
+            after = logged_after or str(after_values.get("skills") or "")
             category = labels[section]
         else:
             swap = fit_analysis.get("project_swap") or {}

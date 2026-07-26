@@ -20,6 +20,11 @@ from src.schemas.common import (
     normalize_string_list,
 )
 from src.schemas.jobs import Job, parse_experience_requirement
+from src.tools.resume_tailoring.latex_structure import (
+    LatexStructureError,
+    latex_to_plain as _structural_latex_to_plain,
+    parse_resume_structure,
+)
 
 REQUIRED_JOB_COLUMNS = {
     "title",
@@ -274,7 +279,7 @@ def load_text_path(path: str | Path, label: str) -> str:
 
 
 def load_resume_data(path: str | Path) -> ResumeData:
-    """Extract structured sections from the repository's LaTeX resume template."""
+    """Extract resume content from conventional LaTeX document structure."""
 
     resolved = Path(path)
     if not resolved.exists():
@@ -286,8 +291,23 @@ def load_resume_data(path: str | Path) -> ResumeData:
     document_content = content.partition(r"\begin{document}")[2] or content
     document_content = document_content.partition(r"\end{document}")[0]
     plain_text = _latex_to_plain(document_content)
-    summary_section = _latex_section(content, "Professional Summary")
-    summary = _latex_to_plain(summary_section) or None
+    try:
+        structure = parse_resume_structure(content, require_projects=False)
+    except LatexStructureError:
+        # Generic evidence extraction remains useful during fit analysis.  The
+        # tailoring tool performs the strict structural check before any edit.
+        structure = None
+    summary = (
+        _structural_latex_to_plain(structure.summary_range.text(content)) or None
+        if structure is not None
+        else (
+            _latex_to_plain(
+                _latex_section(content, "Professional Summary")
+                or _latex_section(content, "Summary")
+            )
+            or None
+        )
+    )
 
     education_section = _latex_section(content, "Education")
     education = [
@@ -297,39 +317,50 @@ def load_resume_data(path: str | Path) -> ResumeData:
         )
     ]
 
-    experience_section = _latex_section(content, "Experience")
-    experience_entries = _extract_command_arguments(
-        experience_section, "resumeEntry", 4
-    )
-    experience: list[str] = []
-    for entry_index, (arguments, offset) in enumerate(experience_entries):
-        next_offset = (
-            experience_entries[entry_index + 1][1]
-            if entry_index + 1 < len(experience_entries)
-            else len(experience_section)
-        )
-        entry_block = experience_section[offset:next_offset]
-        bullets = [
-            _latex_to_plain(items[0])
-            for items, _ in _extract_command_arguments(entry_block, "resumeItem", 1)
+    experience = (
+        [
+            _structural_latex_to_plain(item.content(content))
+            for item in structure.experience_bullets
         ]
-        parts = [*(_latex_to_plain(argument) for argument in arguments), *bullets]
-        experience.append(" | ".join(part for part in parts if part))
+        if structure is not None
+        else [
+            _latex_to_plain(arguments[0])
+            for section_name in ("Experience", "Professional Experience")
+            for arguments, _ in _extract_command_arguments(
+                _latex_section(content, section_name), "resumeItem", 1
+            )
+        ]
+    )
+    projects = (
+        [entry.name for entry in structure.project_entries]
+        if structure is not None
+        else [
+            _latex_to_plain(arguments[0])
+            for section_name in ("Projects", "Selected Projects")
+            for arguments, _ in _extract_command_arguments(
+                _latex_section(content, section_name), "resumeEntry", 4
+            )
+        ]
+    )
 
-    projects_section = _latex_section(content, "Projects")
-    project_entries = _extract_command_arguments(projects_section, "resumeEntry", 4)
-    projects = [
-        _latex_to_plain(arguments[0])
-        for arguments, _ in project_entries
-        if _latex_to_plain(arguments[0])
-    ]
-
-    skills_section = _latex_section(content, "Skills")
     skill_values: list[str] = []
-    for arguments, _ in _extract_command_arguments(skills_section, "item", 1):
-        plain_item = _latex_to_plain(arguments[0])
-        _, separator, values = plain_item.partition(":")
-        skill_values.extend(normalize_string_list(values if separator else plain_item))
+    if structure is not None:
+        for item in structure.skill_items:
+            plain_item = _structural_latex_to_plain(item.content(content))
+            _, separator, values = plain_item.partition(":")
+            skill_values.extend(
+                normalize_string_list(values if separator else plain_item)
+            )
+    else:
+        skills_section = _latex_section(content, "Skills") or _latex_section(
+            content, "Technical Skills"
+        )
+        for arguments, _ in _extract_command_arguments(skills_section, "item", 1):
+            plain_item = _latex_to_plain(arguments[0])
+            _, separator, values = plain_item.partition(":")
+            skill_values.extend(
+                normalize_string_list(values if separator else plain_item)
+            )
 
     evidence_items = [
         EvidenceItem(

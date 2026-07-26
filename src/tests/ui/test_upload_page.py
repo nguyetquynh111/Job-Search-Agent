@@ -1,4 +1,4 @@
-"""Smoke test for the upload page in a partially installed environment."""
+"""Import test for the upload page in a partially installed environment."""
 
 from __future__ import annotations
 

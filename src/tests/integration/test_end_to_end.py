@@ -23,7 +23,7 @@ from src.tools import tailor_resume as tailoring_module
 def test_graph_wiring_across_review_memory_revision_and_letters(
     tmp_path: Path, monkeypatch
 ) -> None:
-    """Fast wiring test; the separate real-pdflatex smoke test proves artifacts."""
+    """Exercise workflow wiring with in-memory PDF fixtures."""
 
     monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "outputs"))
 

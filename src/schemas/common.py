@@ -309,3 +309,5 @@ class ChangeLogEntry(StrictBaseModel):
     after_text: str
     reason: str
     evidence_ids: list[str] = Field(min_length=1)
+    source_location: str = ""
+    validation_result: str = ""

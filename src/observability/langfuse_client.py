@@ -1,4 +1,4 @@
-"""Langfuse client creation with safe local fallback."""
+"""Required Langfuse client creation."""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ class LangfuseClientStatus:
     sdk_version: str | None = None
 
 
-def load_langfuse_config() -> LangfuseConfig | None:
+def load_langfuse_config() -> LangfuseConfig:
     """Load Langfuse configuration from environment variables."""
 
     public_key = (os.getenv("LANGFUSE_PUBLIC_KEY") or "").strip()
@@ -46,25 +46,28 @@ def load_langfuse_config() -> LangfuseConfig | None:
         or os.getenv("LANGFUSE_BASE_URL")
         or DEFAULT_LANGFUSE_HOST
     ).strip()
-    if not public_key or not secret_key:
-        logger.info("Langfuse disabled because configuration is missing")
-        return None
+    missing = [
+        name
+        for name, value in (
+            ("LANGFUSE_PUBLIC_KEY", public_key),
+            ("LANGFUSE_SECRET_KEY", secret_key),
+        )
+        if not value
+    ]
+    if missing:
+        raise RuntimeError(
+            "Langfuse credentials are required: " + ", ".join(missing)
+        )
     if not _valid_host(host):
         raise ValueError("Invalid LANGFUSE_HOST")
     return LangfuseConfig(public_key=public_key, secret_key=secret_key, host=host)
 
 
 def create_langfuse_client() -> tuple[Any | None, LangfuseClientStatus]:
-    """Create and authenticate a Langfuse v2 client when configured."""
+    """Create and authenticate the required Langfuse v2 client."""
 
+    config = load_langfuse_config()
     try:
-        config = load_langfuse_config()
-        if config is None:
-            return None, LangfuseClientStatus(
-                enabled=False,
-                message=STATUS_NOOP,
-                mode="noop",
-            )
         from langfuse import Langfuse
 
         client = Langfuse(
@@ -73,13 +76,7 @@ def create_langfuse_client() -> tuple[Any | None, LangfuseClientStatus]:
             host=config.host,
         )
         if hasattr(client, "auth_check") and not client.auth_check():
-            logger.warning("Langfuse initialization failed; using no-op tracing")
-            return None, LangfuseClientStatus(
-                enabled=False,
-                message=STATUS_UNAVAILABLE,
-                mode="unavailable",
-                sdk_version=_langfuse_version(),
-            )
+            raise RuntimeError("Langfuse authentication failed")
         logger.info("Langfuse enabled")
         return client, LangfuseClientStatus(
             enabled=True,
@@ -88,13 +85,10 @@ def create_langfuse_client() -> tuple[Any | None, LangfuseClientStatus]:
             sdk_version=_langfuse_version(),
         )
     except Exception:
-        logger.warning("Langfuse initialization failed; using no-op tracing")
-        return None, LangfuseClientStatus(
-            enabled=False,
-            message=STATUS_UNAVAILABLE,
-            mode="unavailable",
-            sdk_version=_langfuse_version(),
-        )
+        logger.error("Langfuse initialization failed")
+        raise RuntimeError(
+            "Langfuse initialization failed; connected tracing is required"
+        ) from None
 
 
 def _valid_host(host: str) -> bool:
