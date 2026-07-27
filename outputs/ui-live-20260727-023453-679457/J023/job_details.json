@@ -1,0 +1,36 @@
+{
+  "job_id": "J023",
+  "title": "Computer Vision AI Engineer",
+  "company": "Booz Allen Hamilton",
+  "industry_domain": "Defense / Computer Vision",
+  "location": "McLean, VA",
+  "remote": null,
+  "description": "• Develop computer-vision and AI capabilities for mission systems.\n• Apply deep learning to imagery and sensor data.\n• Implement sensor-fusion and target-tracking approaches.\n• Prepare data and evaluate model performance.\n• Integrate models with software and operational systems.\n• Collaborate with engineers and mission subject-matter experts.\n• Document algorithms, tests and system behavior.\n• Support deployment in secure environments.\n• Bring strong programming and applied AI skills.\n• Bring at least four years in sensor fusion and target tracking.",
+  "required_skills": [
+    "Computer vision",
+    "deep learning",
+    "sensor fusion",
+    "target tracking",
+    "Python",
+    "model deployment"
+  ],
+  "years_experience_required": 4,
+  "experience_requirement": {
+    "minimum_years": 4.0,
+    "maximum_years": null,
+    "raw_text": "4+ years in sensor fusion and target tracking"
+  },
+  "company_details": "Technology and management consulting company serving government and commercial clients.\nIts AI and data teams build production analytics, software and mission systems.",
+  "url": "https://careers.boozallen.com/careers/JobDetail/McLean-Computer-Vision-AI-Engineer-R0244633/127417",
+  "requirements": [
+    "Computer vision",
+    "deep learning",
+    "sensor fusion",
+    "target tracking",
+    "Python",
+    "model deployment"
+  ],
+  "salary_min": null,
+  "salary_max": null,
+  "source": "https://careers.boozallen.com/careers/JobDetail/McLean-Computer-Vision-AI-Engineer-R0244633/127417"
+}

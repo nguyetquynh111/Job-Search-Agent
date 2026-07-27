@@ -183,17 +183,6 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
-# Job Search Agent local runtime artifacts
-outputs/*
-!outputs/.gitkeep
-!outputs/submission-final/
-!outputs/submission-final/**
-outputs/submission-final/checkpoints.sqlite
-*.aux
-*.fdb_latexmk
-*.fls
-*.synctex.gz
-*.toc
 
 # PyCharm
 #   JetBrains specific template is maintained in a separate JetBrains.gitignore that can

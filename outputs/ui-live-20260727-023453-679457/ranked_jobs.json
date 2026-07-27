@@ -1,0 +1,1471 @@
+[
+  {
+    "job": {
+      "job_id": "J017",
+      "title": "Agentic AI Developer",
+      "company": "ManTech",
+      "industry_domain": "Federal Technology / Agentic AI",
+      "location": "United States",
+      "remote": null,
+      "description": "• Develop agentic-AI applications for federal or mission customers.\n• Integrate LLMs with tools, APIs and enterprise data.\n• Implement retrieval and knowledge-grounding workflows.\n• Build secure, maintainable application services.\n• Evaluate outputs, latency and operational reliability.\n• Work with cloud and data-engineering teams.\n• Document architectures, prompts and evaluation results.\n• Support demonstrations and production deployment.\n• Hold a relevant technical degree or equivalent experience.\n• Bring at least two years of relevant professional experience.",
+      "required_skills": [
+        "Python",
+        "LLMs",
+        "agents",
+        "RAG",
+        "APIs",
+        "vector databases",
+        "cloud deployment"
+      ],
+      "years_experience_required": 2,
+      "experience_requirement": {
+        "minimum_years": 2.0,
+        "maximum_years": null,
+        "raw_text": "2+ years"
+      },
+      "company_details": "U.S. technology contractor serving defense, intelligence and federal customers.\nIts engineers build secure data, cyber, cloud and AI capabilities.",
+      "url": "https://careers.mantech.com/en_US/careers/JobDetail/Agentic-AI-Developer/64069",
+      "requirements": [
+        "Python",
+        "LLMs",
+        "agents",
+        "RAG",
+        "APIs",
+        "vector databases",
+        "cloud deployment"
+      ],
+      "salary_min": null,
+      "salary_max": null,
+      "source": "https://careers.mantech.com/en_US/careers/JobDetail/Agentic-AI-Developer/64069"
+    },
+    "score": 86.5,
+    "score_breakdown": {
+      "skill_match": {
+        "alignment": 1.0,
+        "weight": 55.0,
+        "points": 55.0
+      },
+      "experience_alignment": {
+        "alignment": 1.0,
+        "weight": 25.0,
+        "points": 25.0
+      },
+      "industry_domain_alignment": {
+        "alignment": 0.3,
+        "weight": 15.0,
+        "points": 4.5
+      },
+      "location_alignment": {
+        "alignment": 0.4,
+        "weight": 5.0,
+        "points": 2.0
+      }
+    },
+    "rationale": "Score 86.5/100 -- skills: 7/7 required skills evidenced; experience: 4y meets the 2y+ minimum; domain: no domain overlap; location: onsite in a non-preferred location.",
+    "evidence_ids": [
+      "resume-skills-001",
+      "master-skills-001",
+      "portfolio-P01",
+      "portfolio-P02",
+      "portfolio-P03",
+      "portfolio-P04",
+      "portfolio-P05",
+      "portfolio-P06",
+      "portfolio-P07",
+      "portfolio-P08",
+      "resume-upload-001",
+      "resume-experience-002",
+      "resume-project-002"
+    ]
+  },
+  {
+    "job": {
+      "job_id": "J028",
+      "title": "Generative AI Engineer",
+      "company": "Booz Allen Hamilton",
+      "industry_domain": "Government Consulting / Generative AI",
+      "location": "Ashburn, VA",
+      "remote": null,
+      "description": "• Design and build generative-AI applications for client missions.\n• Develop LLM, NLP and deep-learning capabilities.\n• Build agentic workflows and tool integrations.\n• Create production software around models and data.\n• Evaluate quality, safety and operational performance.\n• Integrate AI services with enterprise applications.\n• Collaborate with engineers, data scientists and clients.\n• Document architectures, prompts and model behavior.\n• Bring at least one year of agentic-AI development.\n• Bring at least five years in software, ML engineering, data science or research.",
+      "required_skills": [
+        "Python",
+        "LLMs",
+        "NLP",
+        "deep learning",
+        "agentic AI",
+        "software engineering",
+        "model deployment"
+      ],
+      "years_experience_required": null,
+      "experience_requirement": {
+        "minimum_years": null,
+        "maximum_years": null,
+        "raw_text": "5+ years; plus 1+ year in agentic AI"
+      },
+      "company_details": "Technology and management consulting company serving government and commercial clients.\nIts AI and data teams build production analytics, software and mission systems.",
+      "url": "https://careers.boozallen.com/careers/JobDetail?jobId=126635",
+      "requirements": [
+        "Python",
+        "LLMs",
+        "NLP",
+        "deep learning",
+        "agentic AI",
+        "software engineering",
+        "model deployment"
+      ],
+      "salary_min": null,
+      "salary_max": null,
+      "source": "https://careers.boozallen.com/careers/JobDetail?jobId=126635"
+    },
+    "score": 77.6,
+    "score_breakdown": {
+      "skill_match": {
+        "alignment": 0.8571,
+        "weight": 55.0,
+        "points": 47.14
+      },
+      "experience_alignment": {
+        "alignment": 0.75,
+        "weight": 25.0,
+        "points": 18.75
+      },
+      "industry_domain_alignment": {
+        "alignment": 0.65,
+        "weight": 15.0,
+        "points": 9.75
+      },
+      "location_alignment": {
+        "alignment": 0.4,
+        "weight": 5.0,
+        "points": 2.0
+      }
+    },
+    "rationale": "Score 77.6/100 -- skills: 6/7 required skills evidenced; experience: experience requirement unspecified (neutral); domain: domain overlap on generative ai; location: onsite in a non-preferred location.",
+    "evidence_ids": [
+      "resume-skills-001",
+      "master-skills-001",
+      "portfolio-P01",
+      "portfolio-P02",
+      "portfolio-P03",
+      "portfolio-P04",
+      "portfolio-P05",
+      "portfolio-P06",
+      "portfolio-P07",
+      "portfolio-P08",
+      "resume-upload-001",
+      "resume-experience-002",
+      "resume-project-002"
+    ]
+  },
+  {
+    "job": {
+      "job_id": "J023",
+      "title": "Computer Vision AI Engineer",
+      "company": "Booz Allen Hamilton",
+      "industry_domain": "Defense / Computer Vision",
+      "location": "McLean, VA",
+      "remote": null,
+      "description": "• Develop computer-vision and AI capabilities for mission systems.\n• Apply deep learning to imagery and sensor data.\n• Implement sensor-fusion and target-tracking approaches.\n• Prepare data and evaluate model performance.\n• Integrate models with software and operational systems.\n• Collaborate with engineers and mission subject-matter experts.\n• Document algorithms, tests and system behavior.\n• Support deployment in secure environments.\n• Bring strong programming and applied AI skills.\n• Bring at least four years in sensor fusion and target tracking.",
+      "required_skills": [
+        "Computer vision",
+        "deep learning",
+        "sensor fusion",
+        "target tracking",
+        "Python",
+        "model deployment"
+      ],
+      "years_experience_required": 4,
+      "experience_requirement": {
+        "minimum_years": 4.0,
+        "maximum_years": null,
+        "raw_text": "4+ years in sensor fusion and target tracking"
+      },
+      "company_details": "Technology and management consulting company serving government and commercial clients.\nIts AI and data teams build production analytics, software and mission systems.",
+      "url": "https://careers.boozallen.com/careers/JobDetail/McLean-Computer-Vision-AI-Engineer-R0244633/127417",
+      "requirements": [
+        "Computer vision",
+        "deep learning",
+        "sensor fusion",
+        "target tracking",
+        "Python",
+        "model deployment"
+      ],
+      "salary_min": null,
+      "salary_max": null,
+      "source": "https://careers.boozallen.com/careers/JobDetail/McLean-Computer-Vision-AI-Engineer-R0244633/127417"
+    },
+    "score": 73.4,
+    "score_breakdown": {
+      "skill_match": {
+        "alignment": 0.6667,
+        "weight": 55.0,
+        "points": 36.67
+      },
+      "experience_alignment": {
+        "alignment": 1.0,
+        "weight": 25.0,
+        "points": 25.0
+      },
+      "industry_domain_alignment": {
+        "alignment": 0.65,
+        "weight": 15.0,
+        "points": 9.75
+      },
+      "location_alignment": {
+        "alignment": 0.4,
+        "weight": 5.0,
+        "points": 2.0
+      }
+    },
+    "rationale": "Score 73.4/100 -- skills: 4/6 required skills evidenced; experience: 4y meets the 4y+ minimum; domain: domain overlap on computer vision; location: onsite in a non-preferred location.",
+    "evidence_ids": [
+      "master-skills-001",
+      "portfolio-P01",
+      "portfolio-P06",
+      "portfolio-P07",
+      "resume-upload-001",
+      "resume-skills-001",
+      "portfolio-P05",
+      "portfolio-P04",
+      "portfolio-P02",
+      "portfolio-P03",
+      "portfolio-P08",
+      "resume-experience-002"
+    ]
+  },
+  {
+    "job": {
+      "job_id": "J011",
+      "title": "Agentic AI Engineer",
+      "company": "Booz Allen Hamilton",
+      "industry_domain": "Government Technology / Agentic AI",
+      "location": "Annapolis Junction, MD (Hybrid)",
+      "remote": false,
+      "description": "• Develop applications using large language models.\n• Build agentic workflows that call tools and enterprise services.\n• Create prompts, orchestration logic and evaluation methods.\n• Integrate models with APIs and structured or unstructured data.\n• Test reliability, safety and output quality.\n• Collaborate with software, data and mission teams.\n• Document system behavior and deployment requirements.\n• Support demonstrations and production transition.\n• Bring hands-on LLM application experience.\n• Bring at least one year in ML engineering or data science.",
+      "required_skills": [
+        "LLMs",
+        "Python",
+        "agent frameworks",
+        "prompt engineering",
+        "APIs",
+        "data science",
+        "application development"
+      ],
+      "years_experience_required": 1,
+      "experience_requirement": {
+        "minimum_years": 1.0,
+        "maximum_years": null,
+        "raw_text": "1+ year in ML engineering or data science"
+      },
+      "company_details": "Technology and management consulting company serving government and commercial clients.\nIts AI and data teams build production analytics, software and mission systems.",
+      "url": "https://careers.boozallen.com/jobs/JobDetail?jobId=126460",
+      "requirements": [
+        "LLMs",
+        "Python",
+        "agent frameworks",
+        "prompt engineering",
+        "APIs",
+        "data science",
+        "application development"
+      ],
+      "salary_min": null,
+      "salary_max": null,
+      "source": "https://careers.boozallen.com/jobs/JobDetail?jobId=126460"
+    },
+    "score": 62.9,
+    "score_breakdown": {
+      "skill_match": {
+        "alignment": 0.5714,
+        "weight": 55.0,
+        "points": 31.43
+      },
+      "experience_alignment": {
+        "alignment": 1.0,
+        "weight": 25.0,
+        "points": 25.0
+      },
+      "industry_domain_alignment": {
+        "alignment": 0.3,
+        "weight": 15.0,
+        "points": 4.5
+      },
+      "location_alignment": {
+        "alignment": 0.4,
+        "weight": 5.0,
+        "points": 2.0
+      }
+    },
+    "rationale": "Score 62.9/100 -- skills: 4/7 required skills evidenced; experience: 4y meets the 1y+ minimum; domain: no domain overlap; location: onsite in a non-preferred location.",
+    "evidence_ids": [
+      "portfolio-P03",
+      "resume-upload-001",
+      "resume-experience-002",
+      "resume-project-002",
+      "portfolio-P06",
+      "resume-skills-001",
+      "master-skills-001",
+      "portfolio-P01",
+      "portfolio-P02",
+      "portfolio-P04",
+      "portfolio-P05",
+      "portfolio-P07",
+      "portfolio-P08"
+    ]
+  },
+  {
+    "job": {
+      "job_id": "J013",
+      "title": "AI Engineer / Data Scientist, AI Experienced Associate",
+      "company": "PwC",
+      "industry_domain": "Professional Services / Applied AI",
+      "location": "Multiple U.S. locations, including New York, Chicago and Boston",
+      "remote": null,
+      "description": "• Design and develop AI-enabled solutions for client business problems.\n• Prepare, clean and analyze structured and unstructured data.\n• Build machine-learning or generative-AI prototypes.\n• Translate business requirements into technical tasks.\n• Support testing, evaluation and documentation of AI systems.\n• Collaborate with consultants, engineers and data scientists.\n• Explain technical findings to non-technical stakeholders.\n• Contribute reusable code and project assets.\n• Hold a relevant technical or quantitative degree.\n• Bring at least one year of relevant professional experience.",
+      "required_skills": [
+        "Python",
+        "data wrangling",
+        "AI system design",
+        "machine learning",
+        "generative AI",
+        "client communication"
+      ],
+      "years_experience_required": 1,
+      "experience_requirement": {
+        "minimum_years": 1.0,
+        "maximum_years": null,
+        "raw_text": "1+ year"
+      },
+      "company_details": "Global professional-services network providing assurance, tax and consulting services.\nIts AI teams build data, automation and generative-AI solutions for client and internal use.",
+      "url": "https://jobs.us.pwc.com/job/chicago/ai-engineer-data-scientist-ai-experienced-associate/932/97880100976",
+      "requirements": [
+        "Python",
+        "data wrangling",
+        "AI system design",
+        "machine learning",
+        "generative AI",
+        "client communication"
+      ],
+      "salary_min": null,
+      "salary_max": null,
+      "source": "https://jobs.us.pwc.com/job/chicago/ai-engineer-data-scientist-ai-experienced-associate/932/97880100976"
+    },
+    "score": 59.0,
+    "score_breakdown": {
+      "skill_match": {
+        "alignment": 0.5,
+        "weight": 55.0,
+        "points": 27.5
+      },
+      "experience_alignment": {
+        "alignment": 1.0,
+        "weight": 25.0,
+        "points": 25.0
+      },
+      "industry_domain_alignment": {
+        "alignment": 0.3,
+        "weight": 15.0,
+        "points": 4.5
+      },
+      "location_alignment": {
+        "alignment": 0.4,
+        "weight": 5.0,
+        "points": 2.0
+      }
+    },
+    "rationale": "Score 59.0/100 -- skills: 3/6 required skills evidenced; experience: 4y meets the 1y+ minimum; domain: no domain overlap; location: onsite in a non-preferred location.",
+    "evidence_ids": [
+      "resume-skills-001",
+      "master-skills-001",
+      "portfolio-P01",
+      "portfolio-P02",
+      "portfolio-P03",
+      "portfolio-P04",
+      "portfolio-P05",
+      "portfolio-P06",
+      "portfolio-P07",
+      "portfolio-P08",
+      "resume-upload-001"
+    ]
+  },
+  {
+    "job": {
+      "job_id": "J018",
+      "title": "Agentic AI Machine Learning Engineer",
+      "company": "Booz Allen Hamilton",
+      "industry_domain": "Government Technology / Production ML",
+      "location": "Washington, DC",
+      "remote": null,
+      "description": "• Design and build production-grade agentic-AI and machine-learning solutions.\n• Build ML systems with production tooling such as Docker or Kubernetes.\n• Train or deploy models across multiple data modalities.\n• Integrate models with enterprise data, APIs and software services.\n• Develop application and orchestration code in Python.\n• Deploy and operate solutions using cloud platforms.\n• Create model-evaluation, monitoring and reliability approaches.\n• Collaborate with client, software, data-science and research teams.\n• Document system architecture and operational controls.\n• Bring 3+ years in production ML engineering, 3+ years in data science or research, and 3+ years with cloud platforms.",
+      "required_skills": [
+        "Python",
+        "production-grade ML",
+        "Docker/Kubernetes",
+        "GenAI/LLMs",
+        "AI agents",
+        "multimodal ML",
+        "cloud platforms",
+        "model deployment"
+      ],
+      "years_experience_required": null,
+      "experience_requirement": {
+        "minimum_years": null,
+        "maximum_years": null,
+        "raw_text": "3+ years as an ML engineer building production-grade ML; 3+ years in data science/data research; 3+ years with cloud platforms"
+      },
+      "company_details": "Technology and management consulting company serving government and commercial clients.\nIts AI and data teams build production analytics, software and mission systems.",
+      "url": "https://careers.boozallen.com/jobs/JobDetail/Washington-Agentic-AI-Machine-Learning-Engineer-R0235649/121791",
+      "requirements": [
+        "Python",
+        "production-grade ML",
+        "Docker/Kubernetes",
+        "GenAI/LLMs",
+        "AI agents",
+        "multimodal ML",
+        "cloud platforms",
+        "model deployment"
+      ],
+      "salary_min": null,
+      "salary_max": null,
+      "source": "https://careers.boozallen.com/jobs/JobDetail/Washington-Agentic-AI-Machine-Learning-Engineer-R0235649/121791"
+    },
+    "score": 52.8,
+    "score_breakdown": {
+      "skill_match": {
+        "alignment": 0.5,
+        "weight": 55.0,
+        "points": 27.5
+      },
+      "experience_alignment": {
+        "alignment": 0.75,
+        "weight": 25.0,
+        "points": 18.75
+      },
+      "industry_domain_alignment": {
+        "alignment": 0.3,
+        "weight": 15.0,
+        "points": 4.5
+      },
+      "location_alignment": {
+        "alignment": 0.4,
+        "weight": 5.0,
+        "points": 2.0
+      }
+    },
+    "rationale": "Score 52.8/100 -- skills: 4/8 required skills evidenced; experience: experience requirement unspecified (neutral); domain: no domain overlap; location: onsite in a non-preferred location.",
+    "evidence_ids": [
+      "resume-skills-001",
+      "master-skills-001",
+      "portfolio-P01",
+      "portfolio-P02",
+      "portfolio-P03",
+      "portfolio-P04",
+      "portfolio-P05",
+      "portfolio-P06",
+      "portfolio-P07",
+      "portfolio-P08",
+      "resume-upload-001",
+      "resume-experience-002"
+    ]
+  },
+  {
+    "job": {
+      "job_id": "J014",
+      "title": "Senior Data Scientist",
+      "company": "Amplitude",
+      "industry_domain": "Product Analytics / Experimentation",
+      "location": "San Francisco, CA",
+      "remote": null,
+      "description": "• Advise customers on experimentation and digital-product optimization.\n• Use statistics and data science to answer product questions.\n• Build and analyze experiments and measurement frameworks.\n• Work with data pipelines in warehouse environments.\n• Use Python and SQL for analysis and modeling.\n• Apply Spark or Hadoop when working with large datasets.\n• Communicate with customers as a trusted technical advisor.\n• Translate findings into product and business recommendations.\n• Hold an advanced quantitative or technical degree.\n• Bring at least two years working as a data scientist.",
+      "required_skills": [
+        "Python",
+        "SQL",
+        "experimentation",
+        "statistics",
+        "Spark or Hadoop",
+        "data pipelines",
+        "customer advisory"
+      ],
+      "years_experience_required": 2,
+      "experience_requirement": {
+        "minimum_years": 2.0,
+        "maximum_years": null,
+        "raw_text": "2+ years as a data scientist"
+      },
+      "company_details": "Digital analytics company providing product, experimentation and behavioral-data platforms.\nIts teams help customers use data to improve digital products and growth.",
+      "url": "https://job-boards.greenhouse.io/amplitude/jobs/8541697002",
+      "requirements": [
+        "Python",
+        "SQL",
+        "experimentation",
+        "statistics",
+        "Spark or Hadoop",
+        "data pipelines",
+        "customer advisory"
+      ],
+      "salary_min": null,
+      "salary_max": null,
+      "source": "https://job-boards.greenhouse.io/amplitude/jobs/8541697002"
+    },
+    "score": 52.5,
+    "score_breakdown": {
+      "skill_match": {
+        "alignment": 0.2857,
+        "weight": 55.0,
+        "points": 15.71
+      },
+      "experience_alignment": {
+        "alignment": 1.0,
+        "weight": 25.0,
+        "points": 25.0
+      },
+      "industry_domain_alignment": {
+        "alignment": 0.65,
+        "weight": 15.0,
+        "points": 9.75
+      },
+      "location_alignment": {
+        "alignment": 0.4,
+        "weight": 5.0,
+        "points": 2.0
+      }
+    },
+    "rationale": "Score 52.5/100 -- skills: 2/7 required skills evidenced; experience: 4y meets the 2y+ minimum; domain: domain overlap on experimentation; location: onsite in a non-preferred location.",
+    "evidence_ids": [
+      "resume-skills-001",
+      "master-skills-001",
+      "portfolio-P01",
+      "portfolio-P02",
+      "portfolio-P03",
+      "portfolio-P04",
+      "portfolio-P05",
+      "portfolio-P06",
+      "portfolio-P07",
+      "portfolio-P08",
+      "resume-upload-001"
+    ]
+  },
+  {
+    "job": {
+      "job_id": "J020",
+      "title": "Senior Machine Learning Engineer",
+      "company": "DraftKings",
+      "industry_domain": "Sports Technology / MLOps",
+      "location": "Boston, MA",
+      "remote": null,
+      "description": "• Build and maintain machine-learning services and data workflows.\n• Write scalable production Python applications.\n• Work with structured data, SQL and data modeling.\n• Develop or maintain feature and data pipelines.\n• Use model registries, orchestration and feature-store concepts.\n• Apply object-oriented design, testing and version control.\n• Collaborate with data scientists and product engineers.\n• Improve model reliability and production operations.\n• Bring strong software-engineering fundamentals.\n• Bring at least three years with production Python and structured data.",
+      "required_skills": [
+        "Production Python",
+        "SQL",
+        "data modeling",
+        "MLOps",
+        "feature pipelines",
+        "testing",
+        "version control"
+      ],
+      "years_experience_required": 3,
+      "experience_requirement": {
+        "minimum_years": 3.0,
+        "maximum_years": null,
+        "raw_text": "3+ years writing production Python and working with structured data"
+      },
+      "company_details": "Digital sports entertainment and gaming company.\nIts engineering teams use data, personalization and machine learning in consumer products.",
+      "url": "https://careers.draftkings.com/jobs/jr14444/senior-machine-learning-engineer/",
+      "requirements": [
+        "Production Python",
+        "SQL",
+        "data modeling",
+        "MLOps",
+        "feature pipelines",
+        "testing",
+        "version control"
+      ],
+      "salary_min": null,
+      "salary_max": null,
+      "source": "https://careers.draftkings.com/jobs/jr14444/senior-machine-learning-engineer/"
+    },
+    "score": 52.5,
+    "score_breakdown": {
+      "skill_match": {
+        "alignment": 0.2857,
+        "weight": 55.0,
+        "points": 15.71
+      },
+      "experience_alignment": {
+        "alignment": 1.0,
+        "weight": 25.0,
+        "points": 25.0
+      },
+      "industry_domain_alignment": {
+        "alignment": 0.65,
+        "weight": 15.0,
+        "points": 9.75
+      },
+      "location_alignment": {
+        "alignment": 0.4,
+        "weight": 5.0,
+        "points": 2.0
+      }
+    },
+    "rationale": "Score 52.5/100 -- skills: 2/7 required skills evidenced; experience: 4y meets the 3y+ minimum; domain: domain overlap on mlops; location: onsite in a non-preferred location.",
+    "evidence_ids": [
+      "resume-skills-001",
+      "resume-upload-001",
+      "portfolio-P08"
+    ]
+  },
+  {
+    "job": {
+      "job_id": "J024",
+      "title": "Data Scientist, Senior",
+      "company": "Booz Allen Hamilton",
+      "industry_domain": "Government Consulting / Data Science",
+      "location": "Edgewood, MD",
+      "remote": null,
+      "description": "• Develop data-science solutions for mission and operational problems.\n• Analyze complex structured and unstructured datasets.\n• Build machine-learning and analytical workflows.\n• Use data-engineering methods to prepare reliable datasets.\n• Develop visualizations and decision-support products.\n• Collaborate with client and technical stakeholders.\n• Apply platforms such as Palantir Foundry where required.\n• Document analyses, models and assumptions.\n• Communicate findings clearly to multiple audiences.\n• Bring at least four years in data science, ML, engineering or analytics.",
+      "required_skills": [
+        "Data science",
+        "ML",
+        "data engineering",
+        "analytics",
+        "Palantir Foundry",
+        "Python",
+        "stakeholder communication"
+      ],
+      "years_experience_required": 4,
+      "experience_requirement": {
+        "minimum_years": 4.0,
+        "maximum_years": null,
+        "raw_text": "4+ years"
+      },
+      "company_details": "Technology and management consulting company serving government and commercial clients.\nIts AI and data teams build production analytics, software and mission systems.",
+      "url": "https://careers.boozallen.com/jobs/JobDetail/Edgewood-Data-Scientist-Senior-R0241997/125870",
+      "requirements": [
+        "Data science",
+        "ML",
+        "data engineering",
+        "analytics",
+        "Palantir Foundry",
+        "Python",
+        "stakeholder communication"
+      ],
+      "salary_min": null,
+      "salary_max": null,
+      "source": "https://careers.boozallen.com/jobs/JobDetail/Edgewood-Data-Scientist-Senior-R0241997/125870"
+    },
+    "score": 52.5,
+    "score_breakdown": {
+      "skill_match": {
+        "alignment": 0.2857,
+        "weight": 55.0,
+        "points": 15.71
+      },
+      "experience_alignment": {
+        "alignment": 1.0,
+        "weight": 25.0,
+        "points": 25.0
+      },
+      "industry_domain_alignment": {
+        "alignment": 0.65,
+        "weight": 15.0,
+        "points": 9.75
+      },
+      "location_alignment": {
+        "alignment": 0.4,
+        "weight": 5.0,
+        "points": 2.0
+      }
+    },
+    "rationale": "Score 52.5/100 -- skills: 2/7 required skills evidenced; experience: 4y meets the 4y+ minimum; domain: domain overlap on data science; location: onsite in a non-preferred location.",
+    "evidence_ids": [
+      "resume-upload-001",
+      "portfolio-P01",
+      "portfolio-P02",
+      "portfolio-P08",
+      "resume-skills-001",
+      "master-skills-001",
+      "portfolio-P03",
+      "portfolio-P04",
+      "portfolio-P05",
+      "portfolio-P06",
+      "portfolio-P07"
+    ]
+  },
+  {
+    "job": {
+      "job_id": "J005",
+      "title": "AI Software Intern - Fall 2026",
+      "company": "Formlabs",
+      "industry_domain": "3D Printing / Computer Vision",
+      "location": "Somerville, MA (On-site)",
+      "remote": false,
+      "description": "• Work full time on site during the fall 2026 internship term.\n• Design and evaluate ML models for 3D spatial data.\n• Develop computer-vision and time-series systems for print monitoring.\n• Work with point clouds, meshes and voxel representations.\n• Build defect-detection and process-analysis prototypes.\n• Profile and optimize model inference for desktop or cloud use.\n• Collaborate with software and multidisciplinary engineering teams.\n• Use Python with PyTorch or TensorFlow.\n• Apply C++ foundations and geometric-data knowledge.\n• Professional work experience is not required.",
+      "required_skills": [
+        "Python",
+        "PyTorch or TensorFlow",
+        "C++",
+        "computer vision",
+        "3D geometry",
+        "point clouds",
+        "inference optimization"
+      ],
+      "years_experience_required": null,
+      "experience_requirement": {
+        "minimum_years": null,
+        "maximum_years": null,
+        "raw_text": "No explicit years stated; pursuing BS, MS, or PhD"
+      },
+      "company_details": "Formlabs develops professional 3D-printing hardware, materials and software.\nIts products support prototyping and manufacturing across engineering, healthcare and other industries.",
+      "url": "https://careers.formlabs.com/job/8067641/apply/",
+      "requirements": [
+        "Python",
+        "PyTorch or TensorFlow",
+        "C++",
+        "computer vision",
+        "3D geometry",
+        "point clouds",
+        "inference optimization"
+      ],
+      "salary_min": null,
+      "salary_max": null,
+      "source": "https://careers.formlabs.com/job/8067641/apply/"
+    },
+    "score": 46.2,
+    "score_breakdown": {
+      "skill_match": {
+        "alignment": 0.2857,
+        "weight": 55.0,
+        "points": 15.71
+      },
+      "experience_alignment": {
+        "alignment": 0.75,
+        "weight": 25.0,
+        "points": 18.75
+      },
+      "industry_domain_alignment": {
+        "alignment": 0.65,
+        "weight": 15.0,
+        "points": 9.75
+      },
+      "location_alignment": {
+        "alignment": 0.4,
+        "weight": 5.0,
+        "points": 2.0
+      }
+    },
+    "rationale": "Score 46.2/100 -- skills: 2/7 required skills evidenced; experience: experience requirement unspecified (neutral); domain: domain overlap on computer vision; location: onsite in a non-preferred location.",
+    "evidence_ids": [
+      "resume-skills-001",
+      "master-skills-001",
+      "portfolio-P01",
+      "portfolio-P02",
+      "portfolio-P03",
+      "portfolio-P04",
+      "portfolio-P05",
+      "portfolio-P06",
+      "portfolio-P07",
+      "portfolio-P08",
+      "resume-upload-001"
+    ]
+  },
+  {
+    "job": {
+      "job_id": "J026",
+      "title": "Senior AI/ML Engineer",
+      "company": "Optum",
+      "industry_domain": "Healthcare Technology / AI Platforms",
+      "location": "Remote, United States; primary posting location San Francisco, CA",
+      "remote": true,
+      "description": "• Design, develop, test, deploy and maintain AI-powered software solutions.\n• Build responsible AI capabilities using generative AI and traditional machine learning.\n• Develop chatbots, conversational-AI and NLP-based solutions.\n• Build agentic-AI capabilities using MCP or related orchestration frameworks.\n• Integrate AI features into web services, APIs and cloud-modernization initiatives.\n• Provide technical leadership and mentor engineering team members.\n• Partner with product, architecture and engineering leaders.\n• Ensure security, access control, logging, monitoring, performance and disaster-recovery readiness.\n• Use Python or Java and host applications in cloud environments, with AWS preferred.\n• Bring 6+ years of software engineering plus 4+ years each in AI/ML, web/API development and cloud-hosted applications.",
+      "required_skills": [
+        "Python or Java",
+        "software engineering",
+        "AI/ML and LLMs",
+        "web/API development",
+        "AWS cloud",
+        "chatbots/conversational AI",
+        "NLP",
+        "agentic AI",
+        "security and production operations"
+      ],
+      "years_experience_required": null,
+      "experience_requirement": {
+        "minimum_years": null,
+        "maximum_years": null,
+        "raw_text": "6+ years software engineering; 4+ years building AI/ML solutions; 4+ years web/API development; 4+ years cloud-hosted applications"
+      },
+      "company_details": "Health-services and technology business within UnitedHealth Group.\nIts engineering teams build cloud, analytics and AI systems for healthcare operations.",
+      "url": "https://careers.unitedhealthgroup.com/job/san-francisco/senior-ai-ml-engineer-remote/34088/95955894432",
+      "requirements": [
+        "Python or Java",
+        "software engineering",
+        "AI/ML and LLMs",
+        "web/API development",
+        "AWS cloud",
+        "chatbots/conversational AI",
+        "NLP",
+        "agentic AI",
+        "security and production operations"
+      ],
+      "salary_min": null,
+      "salary_max": null,
+      "source": "https://careers.unitedhealthgroup.com/job/san-francisco/senior-ai-ml-engineer-remote/34088/95955894432"
+    },
+    "score": 45.7,
+    "score_breakdown": {
+      "skill_match": {
+        "alignment": 0.2222,
+        "weight": 55.0,
+        "points": 12.22
+      },
+      "experience_alignment": {
+        "alignment": 0.75,
+        "weight": 25.0,
+        "points": 18.75
+      },
+      "industry_domain_alignment": {
+        "alignment": 0.65,
+        "weight": 15.0,
+        "points": 9.75
+      },
+      "location_alignment": {
+        "alignment": 1.0,
+        "weight": 5.0,
+        "points": 5.0
+      }
+    },
+    "rationale": "Score 45.7/100 -- skills: 2/9 required skills evidenced; experience: experience requirement unspecified (neutral); domain: domain overlap on healthcare technology; location: remote-eligible.",
+    "evidence_ids": [
+      "resume-skills-001",
+      "master-skills-001",
+      "portfolio-P02",
+      "portfolio-P08",
+      "resume-upload-001",
+      "portfolio-P03"
+    ]
+  },
+  {
+    "job": {
+      "job_id": "J010",
+      "title": "AI Software Engineer",
+      "company": "Booz Allen Hamilton",
+      "industry_domain": "Government Technology / AI Software",
+      "location": "Arlington, VA",
+      "remote": null,
+      "description": "• Design and implement software supporting AI and machine-learning solutions.\n• Translate mission requirements into user-focused technical components.\n• Develop application services and model-integration code.\n• Configure and integrate software in client environments.\n• Write tests and support secure deployment workflows.\n• Collaborate with data scientists, engineers and mission stakeholders.\n• Document designs and operational procedures.\n• Troubleshoot software and integration issues.\n• Write production-grade applications in languages such as Python, JavaScript, Rust or Go.\n• Bring at least four years of production-grade application-development experience.",
+      "required_skills": [
+        "Python/JavaScript/Rust/Go",
+        "production-grade software",
+        "AI/ML integration",
+        "APIs",
+        "cloud",
+        "testing",
+        "software design",
+        "deployment"
+      ],
+      "years_experience_required": 4,
+      "experience_requirement": {
+        "minimum_years": 4.0,
+        "maximum_years": null,
+        "raw_text": "4+ years writing production-grade applications"
+      },
+      "company_details": "Technology and management consulting company serving government and commercial clients.\nIts AI and data teams build production analytics, software and mission systems.",
+      "url": "https://careers.boozallen.com/careers/JobDetail/Arlington-AI-Software-Engineer-R0244680/127458",
+      "requirements": [
+        "Python/JavaScript/Rust/Go",
+        "production-grade software",
+        "AI/ML integration",
+        "APIs",
+        "cloud",
+        "testing",
+        "software design",
+        "deployment"
+      ],
+      "salary_min": null,
+      "salary_max": null,
+      "source": "https://careers.boozallen.com/careers/JobDetail/Arlington-AI-Software-Engineer-R0244680/127458"
+    },
+    "score": 45.2,
+    "score_breakdown": {
+      "skill_match": {
+        "alignment": 0.25,
+        "weight": 55.0,
+        "points": 13.75
+      },
+      "experience_alignment": {
+        "alignment": 1.0,
+        "weight": 25.0,
+        "points": 25.0
+      },
+      "industry_domain_alignment": {
+        "alignment": 0.3,
+        "weight": 15.0,
+        "points": 4.5
+      },
+      "location_alignment": {
+        "alignment": 0.4,
+        "weight": 5.0,
+        "points": 2.0
+      }
+    },
+    "rationale": "Score 45.2/100 -- skills: 2/8 required skills evidenced; experience: 4y meets the 4y+ minimum; domain: no domain overlap; location: onsite in a non-preferred location.",
+    "evidence_ids": [
+      "resume-upload-001",
+      "portfolio-P03",
+      "portfolio-P08",
+      "resume-skills-001",
+      "portfolio-P02",
+      "portfolio-P06"
+    ]
+  },
+  {
+    "job": {
+      "job_id": "J001",
+      "title": "Data AI Co-op / Internship",
+      "company": "BrainPOP",
+      "industry_domain": "EdTech / Data and Generative AI",
+      "location": "New York, NY (Hybrid)",
+      "remote": false,
+      "description": "• Run during the fall 2026 co-op period.\n• Work a full-time weekday schedule with a hybrid New York arrangement.\n• Analyze product, engagement and revenue data in Snowflake.\n• Support Tableau dashboards and convert selected workflows to Streamlit.\n• Build reusable Snowflake or dbt data models.\n• Support the CortexAI semantic layer and structured prompts.\n• Document, test and evaluate AI-assisted analytics workflows.\n• Work with product, data and education stakeholders.\n• Bring working knowledge of SQL and Python.\n• Professional years of experience are not required.",
+      "required_skills": [
+        "SQL",
+        "Python",
+        "Snowflake",
+        "dbt",
+        "Tableau",
+        "Streamlit",
+        "CortexAI",
+        "prompt evaluation"
+      ],
+      "years_experience_required": null,
+      "experience_requirement": {
+        "minimum_years": null,
+        "maximum_years": null,
+        "raw_text": "No explicit years stated; current student or recent graduate eligibility applies"
+      },
+      "company_details": "Education-technology company creating digital learning products for schools and families.\nIts data and product teams use analytics and AI to improve learning experiences.",
+      "url": "https://job-boards.greenhouse.io/brainpop/jobs/4697549006",
+      "requirements": [
+        "SQL",
+        "Python",
+        "Snowflake",
+        "dbt",
+        "Tableau",
+        "Streamlit",
+        "CortexAI",
+        "prompt evaluation"
+      ],
+      "salary_min": null,
+      "salary_max": null,
+      "source": "https://job-boards.greenhouse.io/brainpop/jobs/4697549006"
+    },
+    "score": 44.2,
+    "score_breakdown": {
+      "skill_match": {
+        "alignment": 0.25,
+        "weight": 55.0,
+        "points": 13.75
+      },
+      "experience_alignment": {
+        "alignment": 0.75,
+        "weight": 25.0,
+        "points": 18.75
+      },
+      "industry_domain_alignment": {
+        "alignment": 0.65,
+        "weight": 15.0,
+        "points": 9.75
+      },
+      "location_alignment": {
+        "alignment": 0.4,
+        "weight": 5.0,
+        "points": 2.0
+      }
+    },
+    "rationale": "Score 44.2/100 -- skills: 2/8 required skills evidenced; experience: experience requirement unspecified (neutral); domain: domain overlap on data and generative ai; location: onsite in a non-preferred location.",
+    "evidence_ids": [
+      "resume-skills-001",
+      "resume-upload-001",
+      "master-skills-001",
+      "portfolio-P01",
+      "portfolio-P02",
+      "portfolio-P03",
+      "portfolio-P04",
+      "portfolio-P05",
+      "portfolio-P06",
+      "portfolio-P07",
+      "portfolio-P08"
+    ]
+  },
+  {
+    "job": {
+      "job_id": "J012",
+      "title": "AI Product Engineer - Private Equity Platform",
+      "company": "D. E. Shaw Group",
+      "industry_domain": "Investment Technology / AI Products",
+      "location": "New York, NY",
+      "remote": null,
+      "description": "• Build AI-enabled products for private-equity investment and operating workflows.\n• Develop and integrate production large-language-model systems.\n• Design user-facing workflow products and supporting services.\n• Translate investment-team needs into reliable technical features.\n• Create APIs, data integrations and evaluation processes.\n• Partner with product, engineering and investment stakeholders.\n• Test model quality, reliability and user value.\n• Maintain production standards for security and observability.\n• Bring at least five years of relevant professional experience.\n• Include at least two years in technology product development, one year with workflow products and one year with production LLM systems.",
+      "required_skills": [
+        "LLM systems",
+        "Python",
+        "product engineering",
+        "workflow products",
+        "APIs",
+        "data integration",
+        "private-equity workflows"
+      ],
+      "years_experience_required": null,
+      "experience_requirement": {
+        "minimum_years": null,
+        "maximum_years": null,
+        "raw_text": "5+ years relevant experience, including 2+ years in technology product development, 1+ year with workflow products and 1+ year building production LLM systems"
+      },
+      "company_details": "Global investment and technology firm known for quantitative research and engineering.\nIts teams build AI-enabled platforms, trading systems and internal technology products.",
+      "url": "https://www.deshaw.com/careers/ai-product-engineer-private-equity-platform-5637",
+      "requirements": [
+        "LLM systems",
+        "Python",
+        "product engineering",
+        "workflow products",
+        "APIs",
+        "data integration",
+        "private-equity workflows"
+      ],
+      "salary_min": null,
+      "salary_max": null,
+      "source": "https://www.deshaw.com/careers/ai-product-engineer-private-equity-platform-5637"
+    },
+    "score": 41.0,
+    "score_breakdown": {
+      "skill_match": {
+        "alignment": 0.2857,
+        "weight": 55.0,
+        "points": 15.71
+      },
+      "experience_alignment": {
+        "alignment": 0.75,
+        "weight": 25.0,
+        "points": 18.75
+      },
+      "industry_domain_alignment": {
+        "alignment": 0.3,
+        "weight": 15.0,
+        "points": 4.5
+      },
+      "location_alignment": {
+        "alignment": 0.4,
+        "weight": 5.0,
+        "points": 2.0
+      }
+    },
+    "rationale": "Score 41.0/100 -- skills: 2/7 required skills evidenced; experience: experience requirement unspecified (neutral); domain: no domain overlap; location: onsite in a non-preferred location.",
+    "evidence_ids": [
+      "resume-skills-001",
+      "master-skills-001",
+      "portfolio-P01",
+      "portfolio-P02",
+      "portfolio-P03",
+      "portfolio-P04",
+      "portfolio-P05",
+      "portfolio-P06",
+      "portfolio-P07",
+      "portfolio-P08",
+      "resume-upload-001"
+    ]
+  },
+  {
+    "job": {
+      "job_id": "J022",
+      "title": "Robotics Machine Learning Engineer",
+      "company": "Persona AI",
+      "industry_domain": "Robotics / Embodied AI",
+      "location": "Pensacola, FL or Houston, TX",
+      "remote": null,
+      "description": "• Design Persona's machine-learning software stack for humanoid robots.\n• Apply ML to manipulation, navigation, locomotion and perception.\n• Develop, test and deploy models and data pipelines.\n• Collect and manage data for robot-learning workflows.\n• Monitor model performance in real-world robotic systems.\n• Collaborate with universities and external technology partners.\n• Help grow the machine-learning and autonomy teams.\n• Write high-quality production software.\n• Understand traditional and learning-based robotics approaches.\n• Bring at least three years applying ML to robotics.",
+      "required_skills": [
+        "PyTorch/JAX/TensorFlow",
+        "robot learning",
+        "perception",
+        "navigation",
+        "manipulation",
+        "cloud",
+        "production software"
+      ],
+      "years_experience_required": 3,
+      "experience_requirement": {
+        "minimum_years": 3.0,
+        "maximum_years": null,
+        "raw_text": "3+ years applying machine learning to robotics"
+      },
+      "company_details": "Robotics company developing humanoid robots and embodied-AI systems.\nIts engineering teams work on perception, manipulation, navigation and locomotion.",
+      "url": "https://jobs.ashbyhq.com/persona.ai/b211bb98-0522-4d48-8f05-5df4b164dee2",
+      "requirements": [
+        "PyTorch/JAX/TensorFlow",
+        "robot learning",
+        "perception",
+        "navigation",
+        "manipulation",
+        "cloud",
+        "production software"
+      ],
+      "salary_min": null,
+      "salary_max": null,
+      "source": "https://jobs.ashbyhq.com/persona.ai/b211bb98-0522-4d48-8f05-5df4b164dee2"
+    },
+    "score": 39.4,
+    "score_breakdown": {
+      "skill_match": {
+        "alignment": 0.1429,
+        "weight": 55.0,
+        "points": 7.86
+      },
+      "experience_alignment": {
+        "alignment": 1.0,
+        "weight": 25.0,
+        "points": 25.0
+      },
+      "industry_domain_alignment": {
+        "alignment": 0.3,
+        "weight": 15.0,
+        "points": 4.5
+      },
+      "location_alignment": {
+        "alignment": 0.4,
+        "weight": 5.0,
+        "points": 2.0
+      }
+    },
+    "rationale": "Score 39.4/100 -- skills: 1/7 required skills evidenced; experience: 4y meets the 3y+ minimum; domain: no domain overlap; location: onsite in a non-preferred location.",
+    "evidence_ids": [
+      "resume-upload-001",
+      "resume-skills-001",
+      "portfolio-P02",
+      "portfolio-P06"
+    ]
+  },
+  {
+    "job": {
+      "job_id": "J015",
+      "title": "Data Scientist, Mid",
+      "company": "Booz Allen Hamilton",
+      "industry_domain": "Defense Consulting / Data Science",
+      "location": "San Diego, CA",
+      "remote": null,
+      "description": "• Explore and clean complex mission or business datasets.\n• Develop analytical models and reusable data-science workflows.\n• Apply statistical and machine-learning techniques.\n• Create visualizations and communicate analytical findings.\n• Work with client stakeholders to define questions and metrics.\n• Validate data quality and model assumptions.\n• Document methods, code and results.\n• Collaborate with software and data-engineering teams.\n• Hold a relevant technical or quantitative degree.\n• Bring at least two years of data exploration, cleaning and analysis experience.",
+      "required_skills": [
+        "Python or R",
+        "data exploration",
+        "cleaning",
+        "modeling",
+        "visualization",
+        "communication"
+      ],
+      "years_experience_required": 2,
+      "experience_requirement": {
+        "minimum_years": 2.0,
+        "maximum_years": null,
+        "raw_text": "2+ years"
+      },
+      "company_details": "Technology and management consulting company serving government and commercial clients.\nIts AI and data teams build production analytics, software and mission systems.",
+      "url": "https://careers.boozallen.com/jobs/JobDetail/San-Diego-Data-Scientist-Mid-R0241184/125109",
+      "requirements": [
+        "Python or R",
+        "data exploration",
+        "cleaning",
+        "modeling",
+        "visualization",
+        "communication"
+      ],
+      "salary_min": null,
+      "salary_max": null,
+      "source": "https://careers.boozallen.com/jobs/JobDetail/San-Diego-Data-Scientist-Mid-R0241184/125109"
+    },
+    "score": 36.8,
+    "score_breakdown": {
+      "skill_match": {
+        "alignment": 0.0,
+        "weight": 55.0,
+        "points": 0.0
+      },
+      "experience_alignment": {
+        "alignment": 1.0,
+        "weight": 25.0,
+        "points": 25.0
+      },
+      "industry_domain_alignment": {
+        "alignment": 0.65,
+        "weight": 15.0,
+        "points": 9.75
+      },
+      "location_alignment": {
+        "alignment": 0.4,
+        "weight": 5.0,
+        "points": 2.0
+      }
+    },
+    "rationale": "Score 36.8/100 -- skills: 0/6 required skills evidenced; experience: 4y meets the 2y+ minimum; domain: domain overlap on data science; location: onsite in a non-preferred location.",
+    "evidence_ids": []
+  },
+  {
+    "job": {
+      "job_id": "J007",
+      "title": "Compiler Engineer - AI Inference - New College Grad 2026",
+      "company": "NVIDIA",
+      "industry_domain": "Semiconductors / AI Systems",
+      "location": "Santa Clara, CA",
+      "remote": null,
+      "description": "• Develop compiler technology for AI inference and training workloads.\n• Work on kernel generation for NVIDIA GPU platforms.\n• Optimize computational graphs and generated code.\n• Analyze correctness and performance across the compiler stack.\n• Collaborate with GPU, compiler and AI-software teams.\n• Contribute production-quality code, tests and documentation.\n• Apply knowledge of algorithms and computer systems.\n• Use strong C++ or Python software-development skills.\n• Bring compiler, GPU-computing or ML-systems coursework or projects.\n• Prior full-time professional experience is not required.",
+      "required_skills": [
+        "C++",
+        "Python",
+        "compilers",
+        "GPU architecture",
+        "kernel generation",
+        "computational graphs",
+        "AI inference"
+      ],
+      "years_experience_required": null,
+      "experience_requirement": {
+        "minimum_years": null,
+        "maximum_years": null,
+        "raw_text": "No explicit years stated; 2026 new-college-graduate eligibility applies"
+      },
+      "company_details": "NVIDIA develops accelerated-computing platforms based on GPUs, networking and AI software.\nIts technology supports AI training, inference, simulation and high-performance computing.",
+      "url": "https://nvidia.wd5.myworkdayjobs.com/en-US/nvidiaexternalcareersite/job/US-CA-Santa-Clara/Compiler-Engineer--AI-Inference--New-College-Grad-2026_JR2021230",
+      "requirements": [
+        "C++",
+        "Python",
+        "compilers",
+        "GPU architecture",
+        "kernel generation",
+        "computational graphs",
+        "AI inference"
+      ],
+      "salary_min": null,
+      "salary_max": null,
+      "source": "https://nvidia.wd5.myworkdayjobs.com/en-US/nvidiaexternalcareersite/job/US-CA-Santa-Clara/Compiler-Engineer--AI-Inference--New-College-Grad-2026_JR2021230"
+    },
+    "score": 33.1,
+    "score_breakdown": {
+      "skill_match": {
+        "alignment": 0.1429,
+        "weight": 55.0,
+        "points": 7.86
+      },
+      "experience_alignment": {
+        "alignment": 0.75,
+        "weight": 25.0,
+        "points": 18.75
+      },
+      "industry_domain_alignment": {
+        "alignment": 0.3,
+        "weight": 15.0,
+        "points": 4.5
+      },
+      "location_alignment": {
+        "alignment": 0.4,
+        "weight": 5.0,
+        "points": 2.0
+      }
+    },
+    "rationale": "Score 33.1/100 -- skills: 1/7 required skills evidenced; experience: experience requirement unspecified (neutral); domain: no domain overlap; location: onsite in a non-preferred location.",
+    "evidence_ids": [
+      "resume-skills-001",
+      "master-skills-001",
+      "portfolio-P01",
+      "portfolio-P02",
+      "portfolio-P03",
+      "portfolio-P04",
+      "portfolio-P05",
+      "portfolio-P06",
+      "portfolio-P07",
+      "portfolio-P08",
+      "resume-upload-001"
+    ]
+  },
+  {
+    "job": {
+      "job_id": "J019",
+      "title": "Product Manager II, AI & Data Security",
+      "company": "Datadog",
+      "industry_domain": "Cloud Security / AI Governance",
+      "location": "Boston, MA or New York, NY (Hybrid)",
+      "remote": false,
+      "description": "• Own roadmap capabilities for AI discovery and data security.\n• Define product features for AI posture and configuration risk.\n• Address sensitive-data exposure and policy violations.\n• Partner with engineering, design and security research.\n• Engage customers to understand AI adoption and security needs.\n• Translate emerging AI risks into actionable product capabilities.\n• Coordinate launches and product iteration with go-to-market teams.\n• Track adoption and customer outcomes.\n• Understand generative AI and modern cloud architectures.\n• Bring at least three years building technical products.",
+      "required_skills": [
+        "Product management",
+        "AI security",
+        "cloud architecture",
+        "data security",
+        "customer discovery",
+        "roadmap ownership"
+      ],
+      "years_experience_required": 3,
+      "experience_requirement": {
+        "minimum_years": 3.0,
+        "maximum_years": null,
+        "raw_text": "3+ years in technical product management"
+      },
+      "company_details": "Cloud observability and security company providing monitoring across applications, infrastructure and data.\nIts AI-era platform includes model, agent and security capabilities.",
+      "url": "https://careers.datadoghq.com/detail/7982288/?gh_jid=7982288",
+      "requirements": [
+        "Product management",
+        "AI security",
+        "cloud architecture",
+        "data security",
+        "customer discovery",
+        "roadmap ownership"
+      ],
+      "salary_min": null,
+      "salary_max": null,
+      "source": "https://careers.datadoghq.com/detail/7982288/?gh_jid=7982288"
+    },
+    "score": 31.5,
+    "score_breakdown": {
+      "skill_match": {
+        "alignment": 0.0,
+        "weight": 55.0,
+        "points": 0.0
+      },
+      "experience_alignment": {
+        "alignment": 1.0,
+        "weight": 25.0,
+        "points": 25.0
+      },
+      "industry_domain_alignment": {
+        "alignment": 0.3,
+        "weight": 15.0,
+        "points": 4.5
+      },
+      "location_alignment": {
+        "alignment": 0.4,
+        "weight": 5.0,
+        "points": 2.0
+      }
+    },
+    "rationale": "Score 31.5/100 -- skills: 0/6 required skills evidenced; experience: 4y meets the 3y+ minimum; domain: no domain overlap; location: onsite in a non-preferred location.",
+    "evidence_ids": []
+  },
+  {
+    "job": {
+      "job_id": "J006",
+      "title": "Machine Learning Engineer Internship, May–August",
+      "company": "Jane Street",
+      "industry_domain": "Quantitative Finance / Machine Learning",
+      "location": "New York City, NY",
+      "remote": null,
+      "description": "• Work from May through August in New York City.\n• Join a production machine-learning project needed by Jane Street.\n• Partner with a full-time employee who serves as a mentor.\n• Use large, noisy financial datasets and GPU computing resources.\n• Train, evaluate or optimize machine-learning models and workflows.\n• Contribute production-quality code and technical documentation.\n• Share selected classes and activities with software-engineering interns.\n• Be enrolled as an undergraduate or PhD student.\n• Demonstrate practical ML experience through a model, library or workflow project.\n• Professional full-time experience is not required.",
+      "required_skills": [
+        "Programming",
+        "practical ML models or libraries",
+        "experimentation",
+        "collaboration",
+        "curiosity"
+      ],
+      "years_experience_required": null,
+      "experience_requirement": {
+        "minimum_years": null,
+        "maximum_years": null,
+        "raw_text": "No explicit years stated; undergraduate or PhD student eligibility applies"
+      },
+      "company_details": "Global quantitative trading and technology firm with an interdisciplinary research culture.\nIts teams apply mathematics, software engineering and machine learning to financial markets.",
+      "url": "https://www.janestreet.com/join-jane-street/position/8611307002",
+      "requirements": [
+        "Programming",
+        "practical ML models or libraries",
+        "experimentation",
+        "collaboration",
+        "curiosity"
+      ],
+      "salary_min": null,
+      "salary_max": null,
+      "source": "https://www.janestreet.com/join-jane-street/position/8611307002"
+    },
+    "score": 30.5,
+    "score_breakdown": {
+      "skill_match": {
+        "alignment": 0.0,
+        "weight": 55.0,
+        "points": 0.0
+      },
+      "experience_alignment": {
+        "alignment": 0.75,
+        "weight": 25.0,
+        "points": 18.75
+      },
+      "industry_domain_alignment": {
+        "alignment": 0.65,
+        "weight": 15.0,
+        "points": 9.75
+      },
+      "location_alignment": {
+        "alignment": 0.4,
+        "weight": 5.0,
+        "points": 2.0
+      }
+    },
+    "rationale": "Score 30.5/100 -- skills: 0/5 required skills evidenced; experience: experience requirement unspecified (neutral); domain: domain overlap on machine learning; location: onsite in a non-preferred location.",
+    "evidence_ids": []
+  },
+  {
+    "job": {
+      "job_id": "J008",
+      "title": "Strategy & Operations Project Intern - Monetization AI - 2026 Start - MBA",
+      "company": "TikTok",
+      "industry_domain": "Big Tech / AI Monetization",
+      "location": "New York City, NY (Hybrid; at least 3 days/week)",
+      "remote": false,
+      "description": "• Analyze business performance and identify product or growth opportunities.\n• Research AI, advertising, commerce and industry trends.\n• Develop insights and recommendations for product leaders.\n• Support strategic planning, business reviews and leadership presentations.\n• Collaborate with Product, Engineering, Sales, Operations and Data Science.\n• Contribute to short-term projects involving AI-driven advertising opportunities.\n• Work in New York City under a hybrid arrangement.\n• The role requires at least three days per week in the office.\n• Applicants must be enrolled in an MBA with more than one program year completed.\n• Strong analytical, problem-solving and communication skills are required.",
+      "required_skills": [
+        "Business analysis",
+        "AI/advertising/commerce research",
+        "strategy",
+        "presentations",
+        "cross-functional collaboration"
+      ],
+      "years_experience_required": null,
+      "experience_requirement": {
+        "minimum_years": null,
+        "maximum_years": null,
+        "raw_text": "No years stated; MBA student with more than one program year completed"
+      },
+      "company_details": "Global short-form video platform and technology company.\nIts monetization teams develop advertising products and business strategies using data and AI.",
+      "url": "https://lifeattiktok.com/search/7662811565604800773",
+      "requirements": [
+        "Business analysis",
+        "AI/advertising/commerce research",
+        "strategy",
+        "presentations",
+        "cross-functional collaboration"
+      ],
+      "salary_min": null,
+      "salary_max": null,
+      "source": "https://lifeattiktok.com/search/7662811565604800773"
+    },
+    "score": 25.2,
+    "score_breakdown": {
+      "skill_match": {
+        "alignment": 0.0,
+        "weight": 55.0,
+        "points": 0.0
+      },
+      "experience_alignment": {
+        "alignment": 0.75,
+        "weight": 25.0,
+        "points": 18.75
+      },
+      "industry_domain_alignment": {
+        "alignment": 0.3,
+        "weight": 15.0,
+        "points": 4.5
+      },
+      "location_alignment": {
+        "alignment": 0.4,
+        "weight": 5.0,
+        "points": 2.0
+      }
+    },
+    "rationale": "Score 25.2/100 -- skills: 0/5 required skills evidenced; experience: experience requirement unspecified (neutral); domain: no domain overlap; location: onsite in a non-preferred location.",
+    "evidence_ids": []
+  }
+]
