@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from pydantic import Field
+from typing import Any
+
+from pydantic import Field, field_validator
 
 from src.domain import (
     CandidateProfile,
@@ -26,6 +28,10 @@ class AnalyzeFitInput(StrictBaseModel):
     portfolio_projects: list[PortfolioProject] = Field(default_factory=list)
 
 
+# Project findings intentionally share the established evidence-claim schema.
+ProjectAnalysisItem = EvidenceClaim
+
+
 class FitAnalysisOutput(StrictBaseModel):
     """Evidence-backed fit analysis for a single job."""
 
@@ -36,6 +42,17 @@ class FitAnalysisOutput(StrictBaseModel):
     aligned_skills: list[EvidenceClaim] = Field(default_factory=list)
     evidenced_missing_skills: list[EvidenceClaim] = Field(default_factory=list)
     genuine_gaps: list[EvidenceClaim] = Field(default_factory=list)
-    project_analysis: list[EvidenceClaim] = Field(default_factory=list)
+    project_analysis: list[ProjectAnalysisItem] = Field(default_factory=list)
     project_swap: ProjectSwap | None = None
     validation_failures: list[str] = Field(default_factory=list)
+
+    @field_validator("project_analysis", mode="before")
+    @classmethod
+    def normalize_project_analysis(cls, value: Any) -> Any:
+        """Accept the common single-item LLM shape without weakening the contract."""
+
+        if value is None:
+            return []
+        if isinstance(value, dict):
+            return [value]
+        return value

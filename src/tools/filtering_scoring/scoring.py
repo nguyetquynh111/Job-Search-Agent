@@ -362,18 +362,6 @@ def run_scoring_tool(
     unconfigured.
     """
 
-    active = tracer or TraceManager(enabled=False)
-    span_id = active.start_span(
-        "scoring.calculate_and_rank",
-        {"tool_name": "score_jobs", "input_job_count": len(inp.jobs)},
-        input={
-            "job_count": len(inp.jobs),
-            "resume_evidence_count": len(inp.resume_evidence),
-            "portfolio_evidence_count": len(inp.portfolio_evidence),
-            "master_skill_evidence_count": len(inp.master_skill_evidence),
-            "memory_evidence_count": len(inp.memory_evidence),
-        },
-    )
     try:
         evidence = [
             *inp.resume_evidence,
@@ -407,34 +395,9 @@ def run_scoring_tool(
         ranked = sorted(scored, key=lambda item: item.score, reverse=True)
         top_3_job_ids = [item.job.job_id for item in ranked[:TOP_N]]
         output = ScoreJobsOutput(ranked_jobs=ranked, top_3_job_ids=top_3_job_ids)
-    except Exception as exc:
-        active.end_span(
-            span_id,
-            status="ERROR",
-            error_type=exc.__class__.__name__,
-            output={"error_type": exc.__class__.__name__},
-        )
+    except Exception:
         logger.exception("Scoring failed")
         raise
-    active.end_span(
-        span_id,
-        metadata={
-            "result_count": len(output.ranked_jobs),
-            "top_3_job_ids": output.top_3_job_ids,
-            "top_scores": [item.score for item in output.ranked_jobs[:TOP_N]],
-        },
-        output={
-            "top_3_job_ids": output.top_3_job_ids,
-            "ranked_jobs": [
-                {
-                    "job_id": item.job.job_id,
-                    "company": item.job.company,
-                    "score": item.score,
-                }
-                for item in output.ranked_jobs
-            ],
-        },
-    )
     logger.info(
         "Scoring complete: ranked %d jobs; Top-3 = %s.",
         len(output.ranked_jobs),

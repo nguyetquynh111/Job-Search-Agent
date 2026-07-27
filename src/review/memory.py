@@ -55,12 +55,18 @@ class MemoryFact(StrictBaseModel):
     conflicts: list[MemoryConflict] = Field(default_factory=list)
 
     @property
-    def deduplication_key(self) -> tuple[str, str]:
+    def deduplication_key(self) -> tuple[str, str, str]:
         """Return the case-insensitive identity used by the JSON store."""
 
+        scoped_job_id = (
+            self.provenance.related_job_id or ""
+            if self.fact_type.strip().casefold() == "resume_feedback"
+            else ""
+        )
         return (
             self.fact_type.strip().casefold(),
             " ".join(self.canonical_value.split()).casefold(),
+            scoped_job_id.strip().casefold(),
         )
 
 
@@ -149,6 +155,57 @@ class JSONMemoryStore:
         tmp_path.replace(self.path)
 
 
+def generate_preference_memory(feedback: str) -> str:
+    """Turn reviewer wording into a concise, reusable candidate preference."""
+
+    text = " ".join(feedback.split()).strip()
+    if not text:
+        return ""
+    if re.match(r"^Candidate\s+prefers?\b", text, re.IGNORECASE):
+        return text.rstrip(" .") + "."
+    text = re.sub(r"^(?:please\s+)?", "", text, flags=re.IGNORECASE)
+    substitutions = (
+        (r"^I\s+prefer\s+", "Candidate prefers "),
+        (r"^I(?:'d| would)\s+like\s+", "Candidate prefers "),
+        (r"^Please\s+", "Candidate prefers "),
+        (r"^(?:Emphasize|Highlight)\s+", "Candidate prefers highlighting "),
+        (r"^(?:Add|Include)\s+", "Candidate prefers including "),
+    )
+    for pattern, replacement in substitutions:
+        updated = re.sub(pattern, replacement, text, count=1, flags=re.IGNORECASE)
+        if updated != text:
+            text = updated
+            break
+    else:
+        text = f"Candidate prefers: {text[0].lower()}{text[1:]}"
+    return text.rstrip(" .") + "."
+
+
+def preference_memory_fact(
+    value: str,
+    *,
+    feedback: str,
+    review_round: int,
+) -> MemoryFact:
+    """Build the mandatory, reviewer-editable memory record for this run."""
+
+    canonical = " ".join(value.split()).strip()
+    if not canonical:
+        canonical = generate_preference_memory(feedback)
+    if not canonical:
+        raise MemoryStoreError("A non-empty memory update is required.")
+    return MemoryFact(
+        fact_id=f"mem-{uuid4().hex[:12]}",
+        fact_type="preference",
+        canonical_value=canonical,
+        provenance=MemoryProvenance(
+            source="human_review",
+            review_round=review_round,
+            original_statement=" ".join(feedback.split()).strip() or canonical,
+        ),
+    )
+
+
 _KNOWN_TECHNOLOGIES = {
     "graphql": "GraphQL",
     "kubernetes": "Kubernetes",
@@ -217,28 +274,31 @@ _CANDIDATE_FACT_PATTERNS = (
 def extract_memory_facts(
     comments_by_job: dict[str, str], review_round: int
 ) -> list[MemoryFact]:
-    """Extract only explicit skills and candidate facts, preserving provenance.
+    """Persist CV feedback and extract explicit candidate facts with provenance.
 
-    Review text is untrusted as resume evidence unless it contains a first-person
-    assertion. Editing requests are deliberately ignored. The extraction is
-    deterministic so the exact statement that justified each memory entry remains
+    Every non-empty comment is retained as CV-scoped feedback. Review text remains
+    untrusted as candidate evidence unless it contains an explicit first-person
+    assertion. The extraction is deterministic so each stored entry remains
     auditable.
     """
 
     facts: list[MemoryFact] = []
-    seen: set[tuple[str, str]] = set()
+    seen: set[tuple[str, str, str]] = set()
     for job_id, comment in comments_by_job.items():
         normalized = " ".join(comment.split())
         if not normalized:
             continue
 
         extracted = [
+            ("resume_feedback", normalized),
+            *_extract_preferences(normalized),
             *_extract_known_technologies(normalized),
             *_extract_asserted_skills(normalized),
             *_extract_candidate_facts(normalized),
         ]
         for fact_type, value in extracted:
-            key = (fact_type.casefold(), value.casefold())
+            scoped_job_id = job_id if fact_type == "resume_feedback" else ""
+            key = (fact_type.casefold(), value.casefold(), scoped_job_id.casefold())
             if key in seen:
                 continue
             seen.add(key)
@@ -256,6 +316,22 @@ def extract_memory_facts(
                 )
             )
     return facts
+
+
+def _extract_preferences(comment: str) -> list[tuple[str, str]]:
+    """Keep explicit first-person/candidate preferences as reusable facts."""
+
+    found: list[tuple[str, str]] = []
+    pattern = re.compile(
+        r"(?:^|(?<=[.!?])\s+)"
+        r"(?P<value>(?:Candidate\s+prefers?|I\s+prefer)\b[^.!?]*)",
+        re.IGNORECASE,
+    )
+    for match in pattern.finditer(comment):
+        value = generate_preference_memory(match.group("value"))
+        if value:
+            found.append(("preference", value))
+    return found
 
 
 def _extract_known_technologies(comment: str) -> list[tuple[str, str]]:

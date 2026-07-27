@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from datetime import UTC, datetime
 from collections.abc import Callable
 from typing import Any
 
@@ -88,8 +89,18 @@ project_swap (null or {"remove_project": string or null, "add_project": string, 
 Format each skill claim as "<Skill>: <reason>".
 
 EVERY one of those seven fields is a JSON ARRAY, even when it holds exactly one \
-element — write "seniority": [{...}], NEVER "seniority": {...}. Only project_swap \
-is an object or null.
+element — write "seniority": [{...}], NEVER "seniority": {...}. In particular, \
+project_analysis MUST ALWAYS be a JSON array, even when only one project is \
+discussed:
+"project_analysis": [
+  {
+    "claim": "...",
+    "evidence_ids": ["..."],
+    "confidence": 0.8,
+    "notes": "verdict=match; ..."
+  }
+]
+NEVER return "project_analysis": {...}. Only project_swap is an object or null.
 """
 
 SENIORITY_RATIONALE_SYSTEM = """\
@@ -142,7 +153,7 @@ def complete(
     *,
     tracer: TraceManager | None = None,
     metadata: dict[str, Any] | None = None,
-    generation_name: str = "fit_analysis_llm",
+    generation_name: str = "Fit Analysis LLM",
 ) -> str:
     """Call the configured DeepInfra chat model and return the raw text response."""
 
@@ -154,8 +165,9 @@ def complete(
         api_key=SecretStr(config.deepinfra_api_key),
         base_url=config.deepinfra_base_url,
         temperature=0,
-    )
+    ).bind(response_format={"type": "json_object"})
     messages = [("system", system), ("human", user)]
+    generation_started_at = datetime.now(UTC)
     try:
         response = llm.invoke(messages)
         content = response.content
@@ -175,7 +187,9 @@ def complete(
                 model_parameters={
                     "temperature": 0,
                     "base_url": config.deepinfra_base_url,
+                    "response_format": {"type": "json_object"},
                 },
+                start_time=generation_started_at,
             )
         return text
     except Exception as exc:
@@ -194,9 +208,11 @@ def complete(
                 model_parameters={
                     "temperature": 0,
                     "base_url": config.deepinfra_base_url,
+                    "response_format": {"type": "json_object"},
                 },
                 status="ERROR",
                 error_type=exc.__class__.__name__,
+                start_time=generation_started_at,
             )
         raise
 
@@ -318,13 +334,18 @@ def _run_llm(
 
     system = SYSTEM_PROMPT
     user = build_user_prompt(inp, grounding)
+    first_response = complete_fn(system, user)
     try:
-        return _parse_output(complete_fn(system, user))
+        return _parse_output(first_response)
     except (ValidationError, json.JSONDecodeError, ValueError) as exc:
         logger.warning("Fit-analysis LLM output invalid; retrying once: %s", exc)
         retry_user = (
-            f"{user}\n\nYour previous response could not be parsed into the required "
-            f"schema. Error:\n{exc}\nReturn ONLY corrected JSON."
+            f"{user}\n\nYour previous response failed structured-output validation.\n"
+            f"Validation error:\n{exc}\n\nPrevious response:\n{first_response}\n\n"
+            "Correct only the JSON shape; preserve the response's semantic content. "
+            'The "project_analysis" value MUST ALWAYS be a JSON array, even when '
+            "only one project is discussed. Wrap a single project-analysis object "
+            "in an array. Return JSON only, with no prose or code fences."
         )
         return _parse_output(complete_fn(system, retry_user))
 

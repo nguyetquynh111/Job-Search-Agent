@@ -1,0 +1,260 @@
+:root {
+  --ink: #17202a;
+  --muted: #687386;
+  --line: #e2e6ec;
+  --soft: #f6f7f9;
+  --primary: #4f57d5;
+  --success: #16846f;
+}
+
+html,
+body,
+[class*="css"] {
+  color: var(--ink);
+}
+
+.stApp {
+  background: #f7f8fa;
+}
+
+.block-container {
+  max-width: 1260px;
+  padding-top: 2.1rem;
+  padding-bottom: 4rem;
+}
+
+header[data-testid="stHeader"] {
+  background: transparent;
+}
+
+h1 {
+  font-size: 2.55rem !important;
+  line-height: 1.05 !important;
+  letter-spacing: -0.045em !important;
+  margin: 0 0 1.5rem !important;
+}
+
+h2.stage-title {
+  font-size: 1.65rem;
+  letter-spacing: -0.025em;
+  margin: 1.65rem 0 1rem;
+}
+
+[data-testid="stVerticalBlockBorderWrapper"] {
+  background: #fff;
+  border-color: var(--line) !important;
+  border-radius: 14px !important;
+  box-shadow: none !important;
+}
+
+[data-testid="stVerticalBlockBorderWrapper"] > [data-testid="stVerticalBlock"] {
+  gap: 0.45rem;
+}
+
+[data-testid="stFileUploaderDropzone"] {
+  min-height: 50px;
+  padding: 0.35rem 0.65rem;
+  background: var(--soft);
+  border-color: #d9dee7;
+}
+
+[data-testid="stFileUploaderDropzone"] small,
+[data-testid="stFileUploaderDropzoneInstructions"] > div > span {
+  display: none;
+}
+
+[data-testid="stFileUploaderDropzone"] button {
+  min-height: 32px;
+}
+
+[data-testid="stCaptionContainer"] {
+  color: var(--muted);
+}
+
+.stButton > button,
+.stDownloadButton > button,
+[data-testid="stPopover"] > button {
+  border-radius: 9px;
+  min-height: 40px;
+  font-weight: 650;
+}
+
+.stButton > button[kind="primary"],
+.stDownloadButton > button[kind="primary"] {
+  background: var(--primary);
+}
+
+.mini-workflow {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 0.8rem 0.2rem;
+  margin: 0.15rem 0 0.5rem;
+}
+
+.mini-workflow > i {
+  flex: 1;
+  height: 1px;
+  background: #d9dee7;
+}
+
+.mini-step {
+  display: flex;
+  align-items: center;
+  gap: 0.42rem;
+  white-space: nowrap;
+  color: #9aa3b0;
+  font-size: 0.79rem;
+}
+
+.mini-step span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #cdd3dc;
+}
+
+.mini-step--active {
+  color: var(--primary);
+}
+
+.mini-step--active span {
+  background: var(--primary);
+  box-shadow: 0 0 0 4px rgba(79, 87, 213, 0.1);
+}
+
+.mini-step--complete {
+  color: #47635c;
+}
+
+.mini-step--complete span {
+  background: var(--success);
+}
+
+.compact-list,
+.rank-list {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.compact-row,
+.rank-line {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.82rem 1rem;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.compact-row:last-child,
+.rank-line:last-child {
+  border-bottom: 0;
+}
+
+.compact-row span {
+  flex: 1;
+}
+
+.rank-line > span {
+  width: 24px;
+  color: #8b95a3;
+}
+
+.rank-line > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.rank-line strong,
+.rank-line small {
+  display: block;
+}
+
+.rank-line small {
+  margin-top: 0.13rem;
+  color: var(--muted);
+}
+
+.rank-line em {
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  background: #eef0ff;
+  color: #4149bc;
+  font-size: 0.69rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.rank-line > b {
+  min-width: 42px;
+  text-align: right;
+}
+
+.package-head {
+  min-height: 74px;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.8rem;
+}
+
+.package-head strong,
+.package-head span {
+  display: block;
+}
+
+.package-head strong {
+  line-height: 1.25;
+}
+
+.package-head span {
+  color: var(--muted);
+  margin-top: 0.25rem;
+}
+
+.package-head > b {
+  font-size: 1.35rem;
+}
+
+[data-testid="stMetric"] {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.8rem 1rem;
+}
+
+[data-testid="stExpander"] {
+  border-color: var(--line) !important;
+  border-radius: 11px !important;
+  background: #fff;
+}
+
+[data-testid="stTabs"] [data-baseweb="tab-list"] {
+  gap: 0.25rem;
+}
+
+[data-testid="stTabs"] button {
+  min-height: 38px;
+}
+
+@media (max-width: 800px) {
+  .block-container {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  h1 {
+    font-size: 2rem !important;
+  }
+
+  .mini-workflow {
+    overflow-x: auto;
+    gap: 0.8rem;
+  }
+
+  .mini-workflow > i {
+    min-width: 26px;
+  }
+}

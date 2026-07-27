@@ -70,7 +70,7 @@ def test_legacy_responsibility_locations_are_absent() -> None:
     assert Path("src/agent/controller.py").is_file()
     assert Path("src/agent/graph.py").is_file()
     assert Path("src/agent/state.py").is_file()
-    assert Path("app/app.py").is_file()
+    assert Path("app/streamlit_app.py").is_file()
 
 
 def test_shared_helpers_live_under_utils() -> None:

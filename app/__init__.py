@@ -1,1 +1,1 @@
-"""Streamlit app package."""
+"""Streamlit control center for the existing Job Search Agent."""

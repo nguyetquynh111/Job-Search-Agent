@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -182,46 +181,10 @@ def invoke_tool(
         if isinstance(candidate, TraceManager):
             tracer = candidate
 
-    span_id: str | None = None
-    started = time.perf_counter()
-    if tracer is not None:
-        job_id = _argument_job_id(arguments)
-        span_id = tracer.start_span(
-            "tool_registry.dispatch",
-            {
-                "tool_name": tool.name,
-                "callable_name": tool.callable_name,
-                "job_id": job_id,
-            },
-            input={
-                "tool_name": tool.name,
-                "argument_type": type(arguments).__name__,
-                "job_id": job_id,
-                "arguments": _serialize_arguments(arguments),
-            },
-        )
-    try:
-        result = tool.invoke(arguments, tracer=tracer)
-    except Exception as exc:
-        if tracer is not None and span_id is not None:
-            tracer.end_span(
-                span_id,
-                status="ERROR",
-                error_type=exc.__class__.__name__,
-                output={"error": str(exc)},
-            )
-        raise
-
-    if tracer is not None and span_id is not None:
-        tracer.end_span(
-            span_id,
-            metadata={
-                "duration_ms": round((time.perf_counter() - started) * 1000, 3),
-                "status": getattr(result, "status", "OK"),
-            },
-            output=_result_summary(result),
-        )
-    return result
+    # Registry dispatch is an implementation detail. The agent graph owns the
+    # single assignment-level tool observation and passes the tracer through
+    # solely so actual LLM generations can remain attached to that observation.
+    return tool.invoke(arguments, tracer=tracer)
 
 
 def _argument_job_id(arguments: BaseModel | Mapping[str, Any]) -> str | None:

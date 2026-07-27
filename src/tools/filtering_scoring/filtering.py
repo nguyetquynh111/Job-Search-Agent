@@ -311,17 +311,6 @@ def run_filtering_tool(
     unconfigured.
     """
 
-    active = tracer or TraceManager(enabled=False)
-    span_id = active.start_span(
-        "filtering.evaluate_rules",
-        {"tool_name": "filter_jobs", "input_job_count": len(inp.jobs)},
-        input={
-            "job_count": len(inp.jobs),
-            "remote_only": inp.preferences.remote_only,
-            "preferred_location_count": len(inp.preferences.preferred_locations),
-            "excluded_company_count": len(inp.preferences.excluded_companies),
-        },
-    )
     try:
         accepted = []
         rejected = []
@@ -333,33 +322,9 @@ def run_filtering_tool(
             else:
                 accepted.append(job)
         output = FilterJobsOutput(accepted_jobs=accepted, rejected_jobs=rejected)
-    except Exception as exc:
-        active.end_span(
-            span_id,
-            status="ERROR",
-            error_type=exc.__class__.__name__,
-            output={"error_type": exc.__class__.__name__},
-        )
+    except Exception:
         logger.exception("Filtering failed")
         raise
-    active.end_span(
-        span_id,
-        metadata={
-            "accepted_count": len(output.accepted_jobs),
-            "rejected_count": len(output.rejected_jobs),
-            "accepted_job_ids": [job.job_id for job in output.accepted_jobs][:10],
-        },
-        output={
-            "accepted_job_ids": [job.job_id for job in output.accepted_jobs],
-            "rejected_jobs": [
-                {
-                    "job_id": item.job.job_id,
-                    "reasons": item.reasons,
-                }
-                for item in output.rejected_jobs
-            ],
-        },
-    )
     logger.info(
         "Filtering complete: %d accepted, %d rejected of %d jobs.",
         len(output.accepted_jobs),
