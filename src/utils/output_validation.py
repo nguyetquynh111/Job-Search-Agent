@@ -29,6 +29,13 @@ class OutputManifest(StrictBaseModel):
     pdf_count: int = 9
     trace_id: str | None = None
     trace_url: str | None = None
+    trace_public: bool = False
+    trace_ingest_confirmed: bool = False
+    observation_count: int = 0
+    trace_export_error: str | None = None
+    trace_debug_status: str | None = None
+    langfuse_host: str | None = None
+    langfuse_sdk_version: str | None = None
 
 
 MANDATORY_JOB_FILES = (
@@ -75,6 +82,7 @@ def write_and_validate_outputs(
     state: dict[str, Any],
     *,
     config: AppConfig | None = None,
+    persist_run_files: bool = True,
 ) -> dict[str, Any]:
     """Write canonical Top-3 artifacts and validate the complete output contract."""
 
@@ -165,24 +173,39 @@ def write_and_validate_outputs(
         job_directories=[_public_path(Path(path)) for path in produced_directories],
         mandatory_files_per_job=list(MANDATORY_JOB_FILES),
         trace_id=state.get("trace_id"),
-        trace_url=state.get("trace_url"),
+        trace_url=(
+            state.get("trace_url")
+            if state.get("trace_ingest_confirmed") is True
+            else None
+        ),
+        trace_public=state.get("trace_public") is True,
+        trace_ingest_confirmed=state.get("trace_ingest_confirmed") is True,
+        observation_count=int(state.get("observation_count") or 0),
+        trace_export_error=state.get("trace_export_error"),
+        trace_debug_status=state.get("trace_debug_status"),
+        langfuse_host=state.get("langfuse_host"),
+        langfuse_sdk_version=state.get("langfuse_sdk_version"),
     ).model_dump()
-    _write_run_files(state, root_dir, manifest)
+    if persist_run_files:
+        write_run_files(state, manifest)
     return manifest
 
 
-def _write_run_files(
-    state: dict[str, Any],
-    root_dir: Path,
-    manifest: dict[str, Any],
-) -> None:
+def write_run_files(state: dict[str, Any], manifest: dict[str, Any]) -> None:
+    """Persist run-level files only after tracing has been flushed and checked."""
+
+    root_dir = Path(str(manifest["output_root"]))
     public_manifest = sanitize_public_artifact_references(manifest)
     (root_dir / "run_manifest.json").write_text(
         json.dumps(public_manifest, indent=2, ensure_ascii=False, default=str),
         encoding="utf-8",
     )
     (root_dir / "public_trace_url.txt").write_text(
-        str(manifest.get("trace_url") or manifest.get("trace_id") or ""),
+        str(
+            manifest.get("trace_url")
+            if manifest.get("trace_ingest_confirmed") is True
+            else ""
+        ),
         encoding="utf-8",
     )
     trace_events = sanitize_public_artifact_references(state.get("trace_events", []))

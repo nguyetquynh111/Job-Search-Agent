@@ -37,6 +37,33 @@ class ReviewDecision(StrictBaseModel):
     comment: str = ""
 
 
+class CombinedReviewSubmission(StrictBaseModel):
+    """The single human decision submitted for the complete Top 3 batch."""
+
+    action: Literal["request_revision", "approve"]
+    reviewer_feedback: str = ""
+    generated_memory: str = ""
+    affected_job_ids: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_submission(self) -> "CombinedReviewSubmission":
+        self.reviewer_feedback = " ".join(self.reviewer_feedback.split())
+        self.generated_memory = " ".join(self.generated_memory.split())
+        self.affected_job_ids = list(dict.fromkeys(self.affected_job_ids))
+        if self.action == "request_revision":
+            if not self.reviewer_feedback:
+                raise ValueError("Reviewer feedback is required to request a revision.")
+            if not self.affected_job_ids:
+                raise ValueError("Select at least one resume to revise.")
+        if self.action == "approve" and not (
+            self.reviewer_feedback or self.generated_memory
+        ):
+            raise ValueError(
+                "Reviewer feedback or generated memory is required before approval."
+            )
+        return self
+
+
 class ReviewFeedback(StrictBaseModel):
     """Review decisions for all resumes in the current interrupt payload."""
 
@@ -61,8 +88,10 @@ class ReviewResumePayload(StrictBaseModel):
 
     job_title: str
     company: str
+    score: float | None = None
     fit_analysis: dict
-    change_log: list[dict]
+    change_log: list[dict[str, Any]] = Field(default_factory=list)
+    project_swap: dict[str, Any] | None = None
     resume_pdf_path: str
 
 
@@ -73,6 +102,8 @@ class ReviewInterruptPayload(StrictBaseModel):
     max_revision_rounds: int
     revision_round: int = 0
     is_initial_review: bool = True
+    reviewer_feedback: str = ""
+    generated_memory: str = ""
     resumes: dict[str, ReviewResumePayload]
 
 
@@ -112,6 +143,11 @@ def build_review_payload(state: dict) -> ReviewInterruptPayload:
     tailoring_results = dict(state.get("tailoring_results", {}))
     _assert_review_ready(top_3_job_ids, tailoring_results)
     jobs = {job["job_id"]: job for job in state.get("jobs", [])}
+    scores = {
+        str(item.get("job", {}).get("job_id")): item.get("score")
+        for item in state.get("ranked_jobs", [])
+        if isinstance(item, dict) and isinstance(item.get("job"), dict)
+    }
     fit_analyses = dict(state.get("fit_analyses", {}))
     resumes: dict[str, ReviewResumePayload] = {}
     for job_id in top_3_job_ids:
@@ -120,8 +156,10 @@ def build_review_payload(state: dict) -> ReviewInterruptPayload:
         resumes[job_id] = ReviewResumePayload(
             job_title=job["title"],
             company=job["company"],
+            score=scores.get(job_id),
             fit_analysis=fit_analyses.get(job_id, {}),
-            change_log=tailoring.get("change_log", []),
+            change_log=list(tailoring.get("change_log", [])),
+            project_swap=fit_analyses.get(job_id, {}).get("project_swap"),
             resume_pdf_path=tailoring["output_pdf_path"],
         )
     revision_round = int(state.get("revision_round", 0))
@@ -130,6 +168,8 @@ def build_review_payload(state: dict) -> ReviewInterruptPayload:
         max_revision_rounds=MAX_REVISION_ROUNDS,
         revision_round=revision_round,
         is_initial_review=revision_round == 0,
+        reviewer_feedback=str(state.get("reviewer_feedback", "")),
+        generated_memory=str(state.get("generated_memory", "")),
         resumes=resumes,
     )
 
@@ -152,3 +192,19 @@ def normalize_review_feedback(
             f"Review must include decisions for all selected jobs. Missing={missing}, extra={extra}"
         )
     return feedback
+
+
+def normalize_combined_review_submission(
+    raw_submission: dict[str, Any],
+    expected_job_ids: list[str],
+) -> CombinedReviewSubmission:
+    """Validate one combined review action against the selected Top 3."""
+
+    submission = CombinedReviewSubmission.model_validate(raw_submission)
+    expected = set(expected_job_ids)
+    extra = set(submission.affected_job_ids) - expected
+    if extra:
+        raise ReviewSubmissionError(
+            f"Revision references jobs outside the Top 3: {sorted(extra)}"
+        )
+    return submission

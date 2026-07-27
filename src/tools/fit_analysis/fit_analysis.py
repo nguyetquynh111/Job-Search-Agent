@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 
 from src.config import get_config
 from src.tracing.langfuse import TraceManager
-from src.tools.fit_analysis.contracts import AnalyzeFitInput, FitAnalysisOutput
+from src.tools.fit_analysis.contracts import (
+    AnalyzeFitInput,
+    FitAnalysisOutput,
+    ProjectAnalysisItem,
+)
 from src.tools.fit_analysis.evidence_index import (
     EvidenceIndex,
     build_evidence_index,
@@ -92,21 +97,6 @@ def analyze_fit(
     if not inp.job_evidence:
         inp = inp.model_copy(update={"job_evidence": build_job_evidence(inp.job)})
     active = tracer or TraceManager(enabled=False)
-    span_id = active.start_span(
-        "fit_analysis.analysis_pipeline",
-        {
-            "tool_name": "analyze_fit",
-            "job_id": inp.job.job_id,
-            "company": inp.job.company,
-        },
-        input={
-            "job_id": inp.job.job_id,
-            "company": inp.job.company,
-            "required_skill_count": len(inp.job.required_skills),
-            "evidence_count": len(inp.evidence_items),
-            "portfolio_project_count": len(inp.portfolio_projects),
-        },
-    )
     try:
         active_complete = _traced_completion(active, inp, complete_fn)
         index = build_evidence_index(
@@ -151,42 +141,9 @@ def analyze_fit(
             )
         validated, repairs = validation.post_validate(output, inp)
         repairs = [*merge_repairs, *repairs]
-    except Exception as exc:
-        active.end_span(
-            span_id,
-            status="ERROR",
-            error_type=exc.__class__.__name__,
-            output={"error_type": exc.__class__.__name__},
-        )
+    except Exception:
         logger.exception("Fit analysis failed for %s", inp.job.job_id)
         raise
-    active.end_span(
-        span_id,
-        metadata={
-            "path": path_label,
-            "llm_used": path_label == "llm",
-            "model": meta.get("model"),
-            "system_prompt": meta.get("system_prompt_name"),
-            "evidence_skill_count": len(index.by_skill),
-            "evidence_index": index.summary(),
-            "aligned_count": len(validated.aligned_skills),
-            "evidenced_missing_count": len(validated.evidenced_missing_skills),
-            "genuine_gap_count": len(validated.genuine_gaps),
-            "repairs": repairs,
-            "repair_count": len(repairs),
-            "project_swap": bool(validated.project_swap),
-        },
-        output={
-            "job_id": validated.job_id,
-            "aligned_count": len(validated.aligned_skills),
-            "evidenced_missing_count": len(validated.evidenced_missing_skills),
-            "genuine_gap_count": len(validated.genuine_gaps),
-            "project_swap": validated.project_swap.model_dump()
-            if validated.project_swap
-            else None,
-            "path": path_label,
-        },
-    )
     logger.info(
         "Fit analysis complete for %s via %s path (%d repairs).",
         inp.job.job_id,
@@ -217,22 +174,24 @@ def _traced_completion(
 
     def injected(system: str, user: str) -> str:
         messages = [("system", system), ("human", user)]
+        generation_started_at = datetime.now(UTC)
         try:
             response = complete_fn(system, user)
             tracer.record_generation(
                 {"provider": "injected", "purpose": "fit_analysis", **metadata},
-                name="fit_analysis_llm",
+                name="Fit Analysis LLM",
                 model=get_config().llm_model or "test-model",
                 messages=messages,
                 response=response,
                 usage={},
                 model_parameters={"temperature": 0},
+                start_time=generation_started_at,
             )
             return response
         except Exception as exc:
             tracer.record_generation(
                 {"provider": "injected", "purpose": "fit_analysis", **metadata},
-                name="fit_analysis_llm",
+                name="Fit Analysis LLM",
                 model=get_config().llm_model or "test-model",
                 messages=messages,
                 response={"error_type": exc.__class__.__name__},
@@ -240,6 +199,7 @@ def _traced_completion(
                 model_parameters={"temperature": 0},
                 status="ERROR",
                 error_type=exc.__class__.__name__,
+                start_time=generation_started_at,
             )
             raise
 
@@ -252,6 +212,7 @@ run_fit_analysis_tool.__name__ = "run_fit_analysis_tool"
 __all__ = [
     "AnalyzeFitInput",
     "FitAnalysisOutput",
+    "ProjectAnalysisItem",
     "CurrentVerdict",
     "EvidenceIndex",
     "ProjectScore",

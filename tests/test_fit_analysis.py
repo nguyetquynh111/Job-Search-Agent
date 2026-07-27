@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from src.agent import (
     CandidateProfile,
     CandidatePreferences,
@@ -23,6 +24,7 @@ from src.tools.fit_analysis import fit_analysis as verdict
 from src.tools.fit_analysis import llm as llm_client
 from src.tools.fit_analysis.fit_analysis import AnalyzeFitInput
 from src.tools.fit_analysis.fit_analysis import FitAnalysisOutput
+from src.tools.fit_analysis.fit_analysis import ProjectAnalysisItem
 from src.tools.fit_analysis.fit_analysis import build_evidence_index
 from src.tools.fit_analysis.fit_analysis import build_source_labels, render_fit_analysis
 from src.tools.fit_analysis.fit_analysis import expand_canonical_skills
@@ -1456,6 +1458,47 @@ def _fit_reasoning_fixture():
     return inp, run_prepass(inp, index), index
 
 
+_PROJECT_ANALYSIS_ITEM = {
+    "claim": "Current project 'X' has limited alignment.",
+    "evidence_ids": ["portfolio-P1"],
+    "confidence": 0.7,
+    "notes": "verdict=partial; limited overlap",
+}
+
+
+def test_project_analysis_accepts_valid_list() -> None:
+    output = FitAnalysisOutput(
+        job_id="J1", project_analysis=[_PROJECT_ANALYSIS_ITEM]
+    )
+
+    assert len(output.project_analysis) == 1
+    assert isinstance(output.project_analysis[0], ProjectAnalysisItem)
+
+
+def test_project_analysis_normalizes_single_dictionary() -> None:
+    output = FitAnalysisOutput(
+        job_id="J1", project_analysis=_PROJECT_ANALYSIS_ITEM  # type: ignore[arg-type]
+    )
+
+    assert len(output.project_analysis) == 1
+    assert output.project_analysis[0].claim == _PROJECT_ANALYSIS_ITEM["claim"]
+
+
+def test_project_analysis_normalizes_none_to_empty_list() -> None:
+    output = FitAnalysisOutput(
+        job_id="J1", project_analysis=None  # type: ignore[arg-type]
+    )
+
+    assert output.project_analysis == []
+
+
+def test_project_analysis_rejects_invalid_scalar() -> None:
+    with pytest.raises(ValueError):
+        FitAnalysisOutput(
+            job_id="J1", project_analysis="not a list"  # type: ignore[arg-type]
+        )
+
+
 def test_stub_llm_produces_llm_path() -> None:
     inp, prepass, index = _fit_reasoning_fixture()
     output, path, _ = reasoning.analyze(
@@ -1463,6 +1506,38 @@ def test_stub_llm_produces_llm_path() -> None:
     )
     assert path == "llm"
     assert output.aligned_skills[0].claim.startswith("Python")
+
+
+def test_live_completion_requests_deepinfra_json_mode(monkeypatch) -> None:
+    calls: dict[str, object] = {}
+
+    class FakeChatOpenAI:
+        def __init__(self, **kwargs) -> None:
+            calls["init"] = kwargs
+
+        def bind(self, **kwargs):
+            calls["bind"] = kwargs
+            return self
+
+        def invoke(self, messages):
+            calls["messages"] = messages
+            return SimpleNamespace(content='{"job_id":"J1"}', usage_metadata={})
+
+    monkeypatch.setattr("langchain_openai.ChatOpenAI", FakeChatOpenAI)
+    monkeypatch.setattr(
+        llm_client,
+        "get_config",
+        lambda: SimpleNamespace(
+            llm_model="test-model",
+            deepinfra_api_key="test-key",
+            deepinfra_base_url="https://example.invalid/v1/openai",
+        ),
+    )
+
+    result = llm_client.complete("system", "user")
+
+    assert result == '{"job_id":"J1"}'
+    assert calls["bind"] == {"response_format": {"type": "json_object"}}
 
 
 def test_invalid_then_valid_triggers_single_retry() -> None:
@@ -1477,6 +1552,36 @@ def test_invalid_then_valid_triggers_single_retry() -> None:
     assert calls["n"] == 2
     assert path == "llm"
     assert output.job_id == "J1"
+
+
+def test_retry_prompt_includes_validation_error_and_array_requirement() -> None:
+    inp, prepass, index = _fit_reasoning_fixture()
+    prompts: list[str] = []
+    invalid = json.dumps(
+        {
+            **json.loads(_VALID_JSON),
+            "project_analysis": "not a list",
+        }
+    )
+
+    def invalid_then_valid(_system: str, user: str) -> str:
+        prompts.append(user)
+        return invalid if len(prompts) == 1 else _VALID_JSON
+
+    output, path, _ = reasoning.analyze(
+        inp, prepass, index, complete_fn=invalid_then_valid
+    )
+
+    assert path == "llm"
+    assert output.job_id == "J1"
+    assert len(prompts) == 2
+    assert prompts[1] != prompts[0]
+    assert "Validation error:" in prompts[1]
+    assert "Input should be a valid list" in prompts[1]
+    assert "project_analysis" in prompts[1]
+    assert "MUST ALWAYS be a JSON array" in prompts[1]
+    assert "Correct only the JSON shape" in prompts[1]
+    assert "Return JSON only" in prompts[1]
 
 
 def test_llm_exception_falls_back_deterministically() -> None:

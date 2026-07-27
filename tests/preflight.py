@@ -22,7 +22,6 @@ REQUIRED_MODULES = {
     "pypdf": "pypdf",
     "dotenv": "python-dotenv",
     "yaml": "PyYAML",
-    "streamlit": "streamlit",
 }
 REQUIRED_FIXTURES = (
     "data/jobs.csv",

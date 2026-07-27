@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from app.app import ensure_session_defaults, store_graph_result
-from app.app import save_uploaded_inputs
-from dataclasses import dataclass
 from pathlib import Path
 from pypdf import PdfWriter
 from src.agent import (
@@ -35,9 +32,11 @@ from src.tracing.langfuse import (
     STATUS_UNAVAILABLE,
 )
 from src.tracing.langfuse import ROOT_TRACE_NAME, TraceManager
+from app.services.agent_adapter import _finalize_failed_trace
 from tests import preflight
 from tests.test_pipeline import StateChoosingToolSelectionModel
 from typing import Any
+from uuid import uuid4
 import csv
 import importlib
 import logging
@@ -67,7 +66,7 @@ def test_runtime_preflight_requires_llm_pdflatex_and_langfuse(monkeypatch) -> No
     monkeypatch.delenv("DEEPINFRA_API_KEY", raising=False)
     monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
     monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
-    monkeypatch.setattr("app.configuration.shutil.which", lambda _executable: None)
+    monkeypatch.setattr("src.config.settings.shutil.which", lambda _executable: None)
 
     with pytest.raises(RuntimeError) as exc_info:
         validate_runtime_requirements()
@@ -85,7 +84,7 @@ def test_runtime_preflight_accepts_complete_configuration(monkeypatch) -> None:
     monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "public-test-key")
     monkeypatch.setenv("LANGFUSE_SECRET_KEY", "secret-test-key")
     monkeypatch.setattr(
-        "app.configuration.shutil.which", lambda _executable: "/usr/bin/pdflatex"
+        "src.config.settings.shutil.which", lambda _executable: "/usr/bin/pdflatex"
     )
 
     validate_runtime_requirements()
@@ -484,26 +483,10 @@ def test_related_schema_and_loading_modules_import() -> None:
         "src.review.memory",
         "src.review.human_review",
         "src.tracing.langfuse",
-        "app.app",
     ]
 
     for module in modules:
         assert importlib.import_module(module)
-
-
-# --- test_data_uploaded_inputs.py ---
-"""Tests for the four-file upload workflow."""
-
-
-@dataclass
-class FakeUpload:
-    """Small UploadedFile stand-in for session helper tests."""
-
-    name: str
-    content: bytes
-
-    def getvalue(self) -> bytes:
-        return self.content
 
 
 def test_preferences_only_yaml_builds_internal_profile(tmp_path: Path) -> None:
@@ -576,47 +559,6 @@ Built cited answers over policy documents.
     assert "Built Python pipelines" in resume_evidence[0].text
 
 
-def test_uploads_use_output_memory_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr("app.runtime.tempfile.gettempdir", lambda: str(tmp_path))
-    output_dir = tmp_path / "outputs"
-    memory_file = output_dir / "memory.json"
-    monkeypatch.setenv("OUTPUT_DIR", str(output_dir))
-    session: dict = {}
-    uploads = {
-        "jobs_path": FakeUpload("jobs.csv", b"job_id,title\nJ1,Engineer\n"),
-        "preferences_path": FakeUpload("preferences.yaml", b"remote: true\n"),
-        "resume_path": FakeUpload("resume.tex", b"\\documentclass{article}"),
-        "portfolio_path": FakeUpload("portfolio.txt", b"Project\nDescription"),
-    }
-
-    paths = save_uploaded_inputs(session, uploads)
-
-    assert Path(paths["jobs_path"]).read_bytes() == uploads["jobs_path"].content
-    assert Path(paths["preferences_path"]).suffix == ".yaml"
-    assert Path(paths["resume_path"]).suffix == ".tex"
-    assert Path(paths["portfolio_path"]).suffix == ".txt"
-    assert Path(paths["memory_file"]) == memory_file
-    assert memory_file.read_text(encoding="utf-8") == "[]"
-    assert "memory_file" not in uploads
-
-
-def test_upload_rejects_wrong_file_type(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr("app.runtime.tempfile.gettempdir", lambda: str(tmp_path))
-    uploads = {
-        "jobs_path": FakeUpload("jobs.txt", b"wrong type"),
-        "preferences_path": FakeUpload("preferences.yaml", b"remote: true\n"),
-        "resume_path": FakeUpload("resume.tex", b"resume"),
-        "portfolio_path": FakeUpload("portfolio.txt", b"portfolio"),
-    }
-
-    with pytest.raises(ValueError, match="jobs.txt must use one of: .csv"):
-        save_uploaded_inputs({}, uploads)
-
-
 # --- test_memory_store.py ---
 """Memory store tests."""
 
@@ -684,8 +626,10 @@ def test_memory_conflict_resolution_keeps_audit_and_active_latest(
     assert conflict.active_value == new.canonical_value
 
 
-def test_memory_extractor_ignores_editing_preferences() -> None:
-    """Extractor stores candidate facts, not editing preferences."""
+def test_memory_extractor_scopes_editing_feedback_without_promoting_it_to_fact() -> (
+    None
+):
+    """Every CV comment is retained, while only asserted skills become facts."""
 
     facts = extract_memory_facts(
         {
@@ -695,7 +639,36 @@ def test_memory_extractor_ignores_editing_preferences() -> None:
         review_round=1,
     )
 
-    assert [fact.canonical_value for fact in facts] == ["GraphQL"]
+    assert [
+        (fact.fact_type, fact.canonical_value, fact.provenance.related_job_id)
+        for fact in facts
+    ] == [
+        (
+            "resume_feedback",
+            "Make this shorter and use a friendlier tone.",
+            "J001",
+        ),
+        (
+            "resume_feedback",
+            "Add GraphQL. I have used it in previous projects.",
+            "J002",
+        ),
+        ("skill", "GraphQL", "J002"),
+    ]
+
+
+def test_identical_feedback_is_retained_for_each_cv() -> None:
+    comment = "Make the summary more concise."
+
+    facts = extract_memory_facts(
+        {"J001": comment, "J002": comment},
+        review_round=1,
+    )
+
+    assert [(fact.fact_type, fact.provenance.related_job_id) for fact in facts] == [
+        ("resume_feedback", "J001"),
+        ("resume_feedback", "J002"),
+    ]
 
 
 def test_memory_extractor_supports_new_skills_and_candidate_facts() -> None:
@@ -712,6 +685,11 @@ def test_memory_extractor_supports_new_skills_and_candidate_facts() -> None:
     )
 
     assert {(fact.fact_type, fact.canonical_value) for fact in facts} == {
+        (
+            "resume_feedback",
+            "I have used Snowflake, dbt, and Airflow in previous projects. "
+            "I have 5 years of experience in data engineering.",
+        ),
         ("skill", "Snowflake"),
         ("skill", "dbt"),
         ("skill", "Airflow"),
@@ -719,6 +697,23 @@ def test_memory_extractor_supports_new_skills_and_candidate_facts() -> None:
     }
     assert all(fact.provenance.review_round == 2 for fact in facts)
     assert all(fact.provenance.related_job_id == "J001" for fact in facts)
+
+
+def test_memory_extractor_stores_explicit_project_order_preference() -> None:
+    comment = (
+        "Candidate prefers Cardiovascular Flow and Stenosis Analysis "
+        "to be the first project."
+    )
+
+    facts = extract_memory_facts({"J002": comment}, review_round=1)
+    valid, failures = validate_memory_facts(facts, {"J002": comment})
+
+    assert failures == []
+    assert [(fact.fact_type, fact.canonical_value) for fact in valid] == [
+        ("resume_feedback", comment),
+        ("preference", comment),
+    ]
+    assert all(fact.provenance.related_job_id == "J002" for fact in valid)
 
 
 def test_memory_ids_do_not_repeat_across_extraction_calls() -> None:
@@ -732,15 +727,19 @@ def test_memory_ids_do_not_repeat_across_extraction_calls() -> None:
     assert second[0].fact_id.startswith("mem-")
 
 
-def test_negated_or_pure_editing_skill_request_is_not_stored() -> None:
+def test_negated_skill_request_is_stored_only_as_scoped_feedback() -> None:
     comments = {
         "J001": "Add Go to the resume, but I have never used Go and do not know it."
     }
     facts = extract_memory_facts(comments, review_round=1)
     valid, failures = validate_memory_facts(facts, comments)
 
-    assert facts == []
-    assert valid == []
+    assert [(fact.fact_type, fact.canonical_value) for fact in facts] == [
+        ("resume_feedback", comments["J001"])
+    ]
+    assert [(fact.fact_type, fact.canonical_value) for fact in valid] == [
+        ("resume_feedback", comments["J001"])
+    ]
     assert failures == []
 
 
@@ -749,7 +748,7 @@ def test_negated_or_pure_editing_skill_request_is_not_stored() -> None:
 
 
 class FakeLangfuseClient:
-    """In-memory Langfuse v2-compatible client."""
+    """In-memory Langfuse v4 observation client."""
 
     def __init__(self) -> None:
         self.trace_calls: list[dict[str, Any]] = []
@@ -758,28 +757,87 @@ class FakeLangfuseClient:
         self.event_calls: list[dict[str, Any]] = []
         self.trace_updates: list[dict[str, Any]] = []
         self.flush_count = 0
+        self.ended_observations: list[types.SimpleNamespace] = []
+        self.api = types.SimpleNamespace(
+            observations=types.SimpleNamespace(get_many=self._get_observations)
+        )
 
     def auth_check(self) -> bool:
         return True
 
-    def trace(self, **kwargs: Any) -> object:
-        self.trace_calls.append(kwargs)
-        return types.SimpleNamespace(
-            get_trace_url=lambda: "https://example.test/trace",
-            update=lambda **update: self.trace_updates.append(update),
-        )
+    def start_as_current_observation(self, **kwargs: Any) -> object:
+        client = self
+        trace_id = f"trace-{kwargs['metadata']['run_id']}"
+        call = {
+            **kwargs,
+            "id": trace_id,
+            "name": ROOT_TRACE_NAME,
+            "session_id": kwargs["metadata"]["session_id"],
+            "public": False,
+        }
+        self.trace_calls.append(call)
+        observation = self._observation(call, trace_id=trace_id, is_root=True)
 
-    def span(self, **kwargs: Any) -> object:
-        self.span_calls.append(kwargs)
-        return types.SimpleNamespace()
+        class ObservationContext:
+            def __enter__(self) -> object:
+                return observation
 
-    def generation(self, **kwargs: Any) -> object:
-        self.generation_calls.append(kwargs)
-        return types.SimpleNamespace()
+            def __exit__(self, *_args: Any) -> None:
+                if kwargs.get("end_on_exit", True):
+                    observation.end()
 
-    def event(self, **kwargs: Any) -> object:
-        self.event_calls.append(kwargs)
-        return types.SimpleNamespace()
+        return ObservationContext()
+
+    def start_observation(self, **kwargs: Any) -> object:
+        trace_context = kwargs.get("trace_context", {})
+        call = {
+            **kwargs,
+            "id": uuid4().hex,
+            "trace_id": trace_context.get("trace_id"),
+            "parent_observation_id": trace_context.get("parent_span_id"),
+        }
+        if kwargs.get("as_type") == "generation":
+            self.generation_calls.append(call)
+        elif kwargs.get("name") == "workflow_error":
+            self.event_calls.append(call)
+        else:
+            self.span_calls.append(call)
+        return self._observation(call, trace_id=call["trace_id"])
+
+    def _observation(
+        self, call: dict[str, Any], *, trace_id: str, is_root: bool = False
+    ) -> object:
+        client = self
+        observation = types.SimpleNamespace(id=call["id"], trace_id=trace_id)
+
+        def update(**values: Any) -> object:
+            call.update(values)
+            if is_root:
+                client.trace_updates.append(values)
+            return observation
+
+        def end() -> object:
+            if observation not in client.ended_observations:
+                client.ended_observations.append(observation)
+            return observation
+
+        def set_public() -> object:
+            call["public"] = True
+            return observation
+
+        observation.update = update
+        observation.end = end
+        observation.set_trace_as_public = set_public
+        return observation
+
+    def _get_observations(self, **kwargs: Any) -> object:
+        trace_id = kwargs["trace_id"]
+        data = [
+            item
+            for item in self.ended_observations
+            if item.trace_id == trace_id
+        ]
+        return types.SimpleNamespace(data=data)
 
     def flush(self) -> None:
         self.flush_count += 1
@@ -788,11 +846,18 @@ class FakeLangfuseClient:
 class FailingLangfuseClient(FakeLangfuseClient):
     """Client that raises on remote tracing calls."""
 
-    def trace(self, **kwargs: Any) -> object:
+    def start_as_current_observation(self, **kwargs: Any) -> object:
         raise RuntimeError("remote unavailable")
 
-    def span(self, **kwargs: Any) -> object:
+    def start_observation(self, **kwargs: Any) -> object:
         raise RuntimeError("remote unavailable")
+
+
+class ProjectAwareLangfuseClient(FakeLangfuseClient):
+    """Fake whose top-level v4 client returns a project-aware URL."""
+
+    def get_trace_url(self, *, trace_id: str) -> str:
+        return f"https://example.test/project/project-1/traces/{trace_id}"
 
 
 def test_valid_langfuse_configuration_selects_real_tracer(monkeypatch) -> None:
@@ -820,6 +885,122 @@ def test_valid_langfuse_configuration_selects_real_tracer(monkeypatch) -> None:
     assert tracer.enabled is True
     assert tracer.status_message == STATUS_CONNECTED
     assert instances[0].host == DEFAULT_LANGFUSE_HOST
+
+
+def test_trace_url_appears_only_after_v4_observation_confirmation() -> None:
+    client = ProjectAwareLangfuseClient()
+    tracer = TraceManager(client=client, enabled=True)
+
+    trace_id = tracer.start_run("run-canonical-url", "thread-canonical-url")
+    assert tracer.trace_url is None
+
+    tracer.update_run(output={"status": "complete"})
+    tracer.flush()
+    assert tracer.confirm_ingestion(timeout_seconds=0)
+    assert client.flush_count == 1
+    assert tracer.trace_url == (
+        f"https://example.test/project/project-1/traces/{trace_id}"
+    )
+
+
+def test_trace_url_is_not_exposed_when_root_flush_fails() -> None:
+    class FlushFailingClient(ProjectAwareLangfuseClient):
+        def flush(self) -> None:
+            raise RuntimeError("delivery failed")
+
+    tracer = TraceManager(client=FlushFailingClient(), enabled=True)
+
+    tracer.start_run("run-failed-flush", "thread-failed-flush")
+    tracer.update_run(output={"status": "complete"})
+    tracer.flush()
+
+    assert tracer.enabled is False
+    assert tracer.status_message == STATUS_UNAVAILABLE
+    assert tracer.trace_url is None
+
+
+def test_trace_url_rejects_legacy_unscoped_route() -> None:
+    client = FakeLangfuseClient()
+    tracer = TraceManager(client=client, enabled=True)
+
+    tracer.start_run("run-legacy-url", "thread-legacy-url")
+
+    assert tracer.trace_url is None
+
+
+def test_continued_trace_replaces_checkpointed_legacy_url() -> None:
+    client = ProjectAwareLangfuseClient()
+    tracer = TraceManager(client=client, enabled=True)
+
+    tracer.continue_run(
+        run_id="run-resumed-url",
+        session_id="thread-resumed-url",
+        trace_id="trace-run-resumed-url",
+        trace_url="https://example.test/trace/trace-run-resumed-url",
+    )
+    tracer.update_run(output={"status": "complete"})
+    tracer.flush()
+    tracer.confirm_ingestion(timeout_seconds=0)
+
+    assert tracer.trace_url == (
+        "https://example.test/project/project-1/traces/trace-run-resumed-url"
+    )
+
+
+def test_root_update_ends_v4_root_and_preserves_public_access() -> None:
+
+    client = ProjectAwareLangfuseClient()
+    tracer = TraceManager(client=client, enabled=True)
+    tracer.start_run("run-public-update", "thread-public-update")
+
+    tracer.update_run(
+        metadata={"status": "COMPLETED"},
+        output={"result": "success"},
+    )
+
+    assert client.trace_updates == [
+        {
+            "metadata": {"status": "COMPLETED"},
+            "output": {"result": "success"},
+        }
+    ]
+    assert tracer._root_ended is True
+    assert client.trace_calls[0]["public"] is True
+
+
+def test_failed_run_finalizer_always_flushes_and_ends_root() -> None:
+    client = FakeLangfuseClient()
+    tracer = TraceManager(client=client, enabled=True)
+    tracer.start_run("run-exception", "thread-exception")
+
+    _finalize_failed_trace(tracer, ValueError("workflow failed"))
+
+    assert client.flush_count == 1
+    assert tracer._root_ended is True
+
+
+def test_zero_v4_observations_keeps_link_hidden_and_records_export_error() -> None:
+    client = ProjectAwareLangfuseClient()
+    tracer = TraceManager(client=client, enabled=True)
+    tracer.start_run("run-zero-observations", "thread-zero-observations")
+    client.ended_observations.clear()
+
+    assert tracer.confirm_ingestion(timeout_seconds=0) is False
+    assert tracer.observation_count == 0
+    assert tracer.trace_ingest_confirmed is False
+    assert tracer.trace_url is None
+    assert "no Langfuse v4 observations" in str(tracer.trace_export_error)
+
+
+def test_manifest_trace_id_is_the_sdk_root_observation_trace_id() -> None:
+    client = ProjectAwareLangfuseClient()
+    tracer = TraceManager(client=client, enabled=True)
+
+    trace_id = tracer.start_run("run-sdk-id", "thread-sdk-id")
+    fields = tracer.manifest_trace_fields()
+
+    assert trace_id == client.trace_calls[0]["id"]
+    assert fields["trace_id"] == client.trace_calls[0]["id"]
 
 
 def test_missing_langfuse_credentials_fail_fast() -> None:
@@ -923,7 +1104,7 @@ def test_same_trace_id_is_propagated_through_nested_stages() -> None:
     outer = next(call for call in client.span_calls if call["name"] == "outer_stage")
     inner = next(call for call in client.span_calls if call["name"] == "inner_stage")
     generation = client.generation_calls[0]
-    assert outer["parent_observation_id"] is None
+    assert outer["parent_observation_id"] == client.trace_calls[0]["id"]
     assert inner["parent_observation_id"] == outer["id"]
     assert generation["parent_observation_id"] == inner["id"]
     assert generation["model"] == "test-model"
@@ -943,6 +1124,29 @@ def test_same_trace_id_is_propagated_through_nested_stages() -> None:
         "input_tokens": 2,
         "output_tokens": 2,
     }
+
+
+def test_nested_generation_parameters_are_compatible_with_langfuse_v4() -> None:
+    client = ProjectAwareLangfuseClient()
+    tracer = TraceManager(client=client, enabled=True)
+    tracer.start_run("run-nested-parameters", "thread-nested-parameters")
+
+    tracer.record_generation(
+        name="fit_analysis_llm",
+        model="test-model",
+        model_parameters={
+            "temperature": 0,
+            "response_format": {"type": "json_object"},
+        },
+    )
+
+    remote = client.generation_calls[0]["model_parameters"]
+    assert remote["temperature"] == 0
+    assert remote["response_format"] == '{"type":"json_object"}'
+    local = next(
+        event for event in tracer.events if event.observation_type == "GENERATION"
+    )
+    assert local.model_parameters["response_format"] == {"type": "json_object"}
 
 
 def test_resume_after_interrupt_can_remain_nested_under_human_review() -> None:
@@ -1019,7 +1223,7 @@ def test_disabled_tracing_is_a_noop_for_execution() -> None:
     tracer.update_run(output={"status": "complete"})
     tracer.flush()
 
-    assert trace_id == "trace-run-disabled"
+    assert len(trace_id) == 32
     assert tracer.enabled is False
     assert [event.name for event in tracer.events] == [
         ROOT_TRACE_NAME,
@@ -1068,34 +1272,8 @@ def test_trace_payloads_redact_secrets_and_registered_personal_data() -> None:
     }
 
 
-def test_streamlit_rerun_state_does_not_duplicate_root_trace() -> None:
-    """A rerun that only rehydrates session state does not start another trace."""
-
-    client = FakeLangfuseClient()
-    tracer = TraceManager(client=client, enabled=True)
-    trace_id = tracer.start_run("run-rerun", "thread-rerun")
-    session: dict[str, Any] = {}
-    ensure_session_defaults(session)
-    store_graph_result(
-        session,
-        {
-            "run_id": "run-rerun",
-            "thread_id": "thread-rerun",
-            "trace_id": trace_id,
-            "status": "WAITING_FOR_REVIEW",
-        },
-    )
-
-    ensure_session_defaults(session)
-    tracer.start_run("run-rerun", "thread-rerun")
-
-    assert session["current_run_id"] == "run-rerun"
-    assert session["current_thread_id"] == "thread-rerun"
-    assert len(client.trace_calls) == 1
-
-
 def test_new_process_continues_checkpointed_remote_root_trace() -> None:
-    client = FakeLangfuseClient()
+    client = ProjectAwareLangfuseClient()
     first = TraceManager(client=client, enabled=True)
     trace_id = first.start_run("run-restart", "thread-restart")
     with first.span("human_review") as review_id:
@@ -1106,7 +1284,7 @@ def test_new_process_continues_checkpointed_remote_root_trace() -> None:
         run_id="run-restart",
         session_id="thread-restart",
         trace_id=trace_id,
-        trace_url="https://example.test/trace",
+        trace_url=f"https://example.test/project/project-1/traces/{trace_id}",
     )
     with resumed.span(
         "memory_write",
@@ -1114,12 +1292,17 @@ def test_new_process_continues_checkpointed_remote_root_trace() -> None:
         input={"provenance": "human_review"},
     ):
         pass
+    resumed.update_run(output={"status": "complete"})
+    resumed.flush()
+    resumed.confirm_ingestion(timeout_seconds=0)
 
     assert {call["id"] for call in client.trace_calls} == {trace_id}
     resumed_span = client.span_calls[-1]
     assert resumed_span["trace_id"] == trace_id
     assert resumed_span["parent_observation_id"] == review_id
-    assert resumed.trace_url == "https://example.test/trace"
+    assert resumed.trace_url == (
+        f"https://example.test/project/project-1/traces/{trace_id}"
+    )
 
 
 def test_sensitive_credentials_do_not_appear_in_logs_or_status(

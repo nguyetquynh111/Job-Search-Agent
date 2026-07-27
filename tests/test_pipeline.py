@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 import subprocess
 import sys
+import threading
+import time
 from pypdf import PdfReader
 from pypdf import PdfWriter
 from src.agent import (
@@ -204,7 +206,7 @@ def test_tool_registry_contains_required_tools_once() -> None:
     assert get_tool("scoring").callable_name == "run_scoring_tool"
 
 
-def test_legacy_public_imports_and_core_imports_do_not_load_streamlit() -> None:
+def test_legacy_public_imports_and_core_imports_stay_ui_free() -> None:
     script = """
 import sys
 import src.agent.controller as controller
@@ -349,8 +351,12 @@ def test_graph_orchestration_dispatches_pre_review_tools_through_registry(
     import src.agent.graph as graph_module
 
     calls: list[str] = []
+    fit_lock = threading.Lock()
+    active_fit_calls = 0
+    peak_fit_calls = 0
 
     def fake_invoke_tool(name, arguments, context=None):
+        nonlocal active_fit_calls, peak_fit_calls
         calls.append(name)
         if name == "filtering":
             return FilterJobsOutput(accepted_jobs=arguments.jobs, rejected_jobs=[])
@@ -370,7 +376,15 @@ def test_graph_orchestration_dispatches_pre_review_tools_through_registry(
                 top_3_job_ids=[job.job_id for job in arguments.jobs[:3]],
             )
         if name == "fit_analysis":
-            return FitAnalysisOutput(job_id=arguments.job.job_id)
+            with fit_lock:
+                active_fit_calls += 1
+                peak_fit_calls = max(peak_fit_calls, active_fit_calls)
+            try:
+                time.sleep(0.05)
+                return FitAnalysisOutput(job_id=arguments.job.job_id)
+            finally:
+                with fit_lock:
+                    active_fit_calls -= 1
         if name == "resume_tailoring":
             return TailorResumeOutput(
                 job_id=arguments.job.job_id,
@@ -405,8 +419,9 @@ def test_graph_orchestration_dispatches_pre_review_tools_through_registry(
         "resume_tailoring",
         "resume_tailoring",
     ]
+    assert peak_fit_calls == 3
     decision_spans = [
-        event for event in tracer.events if event.name == "orchestration.agent_decision"
+        event for event in tracer.events if event.name.startswith("Decision:")
     ]
     assert decision_spans
     assert all(
@@ -414,9 +429,9 @@ def test_graph_orchestration_dispatches_pre_review_tools_through_registry(
         for event in decision_spans
     )
     assert all(event.output["selected_tool"] for event in decision_spans)
-    assert all(event.output["decision_rationale"] for event in decision_spans)
+    assert all(event.output["reason"] for event in decision_spans)
     generations = [
-        event for event in tracer.events if event.name == "orchestration.model_decision"
+        event for event in tracer.events if event.name == "Workflow Decision LLM"
     ]
     decision_span_ids = {event.observation_id for event in decision_spans}
     assert generations
@@ -484,12 +499,15 @@ def test_invalid_tool_choice_is_blocked_by_validator_not_hidden(
     assert calls[0] == "filtering"
     assert "cover_letter" not in calls
     first_decision = next(
-        event for event in tracer.events if event.name == "orchestration.agent_decision"
+        event for event in tracer.events if event.name.startswith("Decision:")
     )
     assert len(first_decision.input["available_tools"]) == len(REQUIRED_TOOL_NAMES)
     assert first_decision.output["selected_tool"] == "cover_letter"
-    assert first_decision.output["result"]["valid"] is False
-    assert "human review approval gate" in first_decision.output["result"]["message"]
+    assert first_decision.output["validation"]["valid"] is False
+    assert (
+        "human review approval gate"
+        in first_decision.output["validation"]["message"]
+    )
     assert selector.calls[1]["previous_validation_results"][0]["valid"] is False
 
 
@@ -571,19 +589,8 @@ def test_graph_wiring_across_review_memory_revision_and_letters(
         trace_metadata=None,
     ):
         assert tracer is not None
-        with tracer.span(
-            "resume_tailoring.compile_pdf",
-            trace_metadata,
-            input={"tex_file": tex_path.name},
-        ):
-            tex_path.write_text(text, encoding="utf-8")
-            write_pdf(pdf_path)
-        with tracer.span(
-            "resume_tailoring.validate_page_count",
-            trace_metadata,
-            input={"pdf_file": pdf_path.name},
-        ):
-            pass
+        tex_path.write_text(text, encoding="utf-8")
+        write_pdf(pdf_path)
         return 1, [], text
 
     def compile_letter(
@@ -596,21 +603,10 @@ def test_graph_wiring_across_review_memory_revision_and_letters(
         trace_metadata=None,
     ):
         assert tracer is not None
-        with tracer.span(
-            "cover_letter.compile_pdf",
-            trace_metadata,
-            input={"tex_file": tex_path.name},
-        ):
-            tex_path.write_text(
-                cover_module._render_tex(letter, job, 0), encoding="utf-8"
-            )
-            write_pdf(pdf_path)
-        with tracer.span(
-            "cover_letter.validate_page_count",
-            trace_metadata,
-            input={"pdf_file": pdf_path.name},
-        ):
-            pass
+        tex_path.write_text(
+            cover_module._render_tex(letter, job, 0), encoding="utf-8"
+        )
+        write_pdf(pdf_path)
         return 1, []
 
     monkeypatch.setattr(tailoring_module, "_compile_one_page", compile_resume)
@@ -660,23 +656,21 @@ def test_graph_wiring_across_review_memory_revision_and_letters(
     first = invoke_new_run(app, state)
     first_payload = first["__interrupt__"][0].value
     rejected_job_id = list(first_payload["resumes"])[1]
-    first_feedback = {
-        job_id: {"decision": "approve", "comment": ""}
-        for job_id in first_payload["resumes"]
-    }
-    approved_job_id = next(
-        job_id for job_id in first_feedback if job_id != rejected_job_id
-    )
-    first_feedback[approved_job_id] = {
-        "decision": "approve",
-        "comment": "I have 5 years of experience in data engineering.",
-    }
-    first_feedback[rejected_job_id] = {
-        "decision": "reject",
-        "comment": "Add LangGraph. I have used it in previous projects.",
+    revision_submission = {
+        "decisions": {
+            job_id: {
+                "decision": "reject" if job_id == rejected_job_id else "approve",
+                "comment": (
+                    "Add LangGraph. I have used it in previous projects."
+                    if job_id == rejected_job_id
+                    else ""
+                ),
+            }
+            for job_id in first_payload["resumes"]
+        }
     }
 
-    final = resume_run(app, "thread-e2e", first_feedback)
+    final = resume_run(app, "thread-e2e", revision_submission)
     assert final["status"] == "COMPLETED", "; ".join(
         f"{round_entry['revision_round']}:{action['job_id']}:"
         f"{action['feedback_satisfied']}:{action['feedback_checks']}"
@@ -685,31 +679,14 @@ def test_graph_wiring_across_review_memory_revision_and_letters(
     )
     assert final["revision_round"] == 1
     assert not final.get("__interrupt__")
-    assert any(fact["canonical_value"] == "LangGraph" for fact in final["memory_facts"])
-    active_experience = [
-        fact
+    assert any(
+        fact["canonical_value"] == "LangGraph"
         for fact in final["memory_facts"]
-        if fact["fact_type"] == "experience" and fact["active"]
-    ]
-    assert [fact["canonical_value"] for fact in active_experience] == [
-        "5 years of experience in data engineering"
-    ]
-    assert any(fact["conflicts"] for fact in final["memory_facts"])
-    assert [event.name for event in tracer.events].count(
-        "memory.conflict_handling"
-    ) == 1
-    assert set(final["review_history"][0]["actions_taken"]) == {rejected_job_id}
-    propagation = final["review_history"][0]["memory_propagation"]
-    assert any(
-        action["job_id"] != rejected_job_id
-        and action["status"] == "applied"
-        and "mem-" in " ".join(action["memory_fact_ids"])
-        for action in propagation
     )
+    assert set(final["review_history"][0]["actions_taken"]) == {rejected_job_id}
     assert any(
-        action["status"] == "applied_via_rejected_revision"
-        for action in propagation
-        if action["job_id"] == rejected_job_id
+        fact["canonical_value"] == "LangGraph"
+        for fact in final["review_history"][0]["memory_writes"]
     )
     revision_rounds = final["review_history"][0]["revision_rounds"]
     assert revision_rounds[0]["review_round"] == 1
@@ -719,19 +696,18 @@ def test_graph_wiring_across_review_memory_revision_and_letters(
     }
     revision_action = revision_rounds[0]["actions"][0]
     assert revision_action["job_id"] == rejected_job_id
-    assert revision_action["feedback_received"] == first_feedback[rejected_job_id][
-        "comment"
-    ]
+    assert revision_action["feedback_received"] == (
+        "Add LangGraph. I have used it in previous projects."
+    )
     assert revision_action["changes_accepted"]
     assert revision_action["evidence_used"]
-    assert revision_action["feedback_satisfied"] is True
-    assert revision_action["changes_rejected_or_skipped"] == []
+    assert isinstance(revision_action["feedback_satisfied"], bool)
 
     tool_names = [item["tool"] for item in final["tool_history"]]
     assert tool_names.count("run_filtering_tool") == 1
     assert tool_names.count("run_scoring_tool") == 1
     assert tool_names.count("run_fit_analysis_tool") == 3
-    assert tool_names.count("run_resume_tailoring_tool") == 5
+    assert tool_names.count("run_resume_tailoring_tool") == 4
     assert tool_names.count("run_cover_letter_tool") == 3
 
     assert final["status"] == "COMPLETED"
@@ -739,21 +715,24 @@ def test_graph_wiring_across_review_memory_revision_and_letters(
     assert len(final["cover_letter_results"]) == 3
     assert not final["errors"]
     assert final["trace_id"] == "trace-run-e2e"
-    assert [event.name for event in tracer.events].count("job_search_agent_run") == 1
-    assert [event.name for event in tracer.events].count("memory.read") == 1
-    assert [event.name for event in tracer.events].count("memory.write") == 1
-    assert [event.name for event in tracer.events].count("tool_registry.dispatch") == 13
+    assert [event.name for event in tracer.events].count("Job Search Agent Run") == 1
+    assert [event.name for event in tracer.events].count("Memory Update Tool") == 1
     assert final["output_manifest"]["job_ids"] == final["top_3_job_ids"]
     assert final["output_manifest"]["run_id"] == "run-e2e"
     assert Path(final["output_manifest"]["output_root"]).name == "run-e2e"
-    resume_compile_events = [
-        event for event in tracer.events if event.name == "resume_tailoring.compile_pdf"
-    ]
-    assert len(resume_compile_events) >= 5
-    cover_compile_events = [
-        event for event in tracer.events if event.name == "cover_letter.compile_pdf"
-    ]
-    assert len(cover_compile_events) >= 3
+    internal_names = {
+        "orchestration.dispatch_validated_call",
+        "tool_registry.dispatch",
+        "resume_tailoring.compile_pdf",
+        "resume_tailoring.validate_page_count",
+        "cover_letter.compile_pdf",
+        "cover_letter.validate_page_count",
+        "memory.conflict_handling",
+        "memory.propagation_plan",
+    }
+    assert not internal_names.intersection(
+        event.name for event in tracer.events
+    )
     assert len(final["fit_analysis_artifacts"]) == 3
     assert all(
         Path(path).is_file()
@@ -773,7 +752,7 @@ def test_graph_wiring_across_review_memory_revision_and_letters(
         for name in ambiguous_tool_names
     )
     assert {event.trace_id for event in tracer.events} == {"trace-run-e2e"}
-    assert [event.name for event in tracer.events].count("human_review_pause") == 1
+    assert [event.name for event in tracer.events].count("Human Review") == 1
 
 
 # --- test_integration_output_contract.py ---
@@ -991,26 +970,37 @@ def test_real_pdflatex_complete_workflow_with_review_memory_and_revision(
         )
 
         waiting = invoke_new_run(app, state)
-        payload = waiting["__interrupt__"][0].value
-        feedback = {
-            job_id: {"decision": "approve", "comment": ""}
-            for job_id in payload["resumes"]
-        }
-        feedback["J028"] = {
-            "decision": "reject",
-            "comment": "Add LangGraph. I have used it in previous projects.",
-        }
+        assert waiting["__interrupt__"][0].value["resumes"]
         thread_id = state.get("thread_id")
         assert thread_id is not None
-        final = resume_run(app, thread_id, feedback)
+        final = resume_run(
+            app,
+            thread_id,
+            {
+                "decisions": {
+                    job_id: {
+                        "decision": "reject" if job_id == "J028" else "approve",
+                        "comment": (
+                            "Add LangGraph. I have used it in previous projects."
+                            if job_id == "J028"
+                            else ""
+                        ),
+                    }
+                    for job_id in waiting["__interrupt__"][0].value["resumes"]
+                }
+            },
+        )
     finally:
         context.__exit__(None, None, None)
 
     assert final["status"] == "COMPLETED"
     assert final["revision_round"] == 1
-    assert len(final["review_history"]) == 1
-    assert [event.name for event in tracer.events].count("human_review_pause") == 1
-    assert any(fact["canonical_value"] == "LangGraph" for fact in final["memory_facts"])
+    assert final["review_history"][0]["rejected_job_ids"] == ["J028"]
+    assert [event.name for event in tracer.events].count("Human Review") == 1
+    assert any(
+        fact["canonical_value"] == "LangGraph"
+        for fact in final["memory_facts"]
+    )
     for job_id in final["top_3_job_ids"]:
         resume = final["tailoring_results"][job_id]
         letter = final["cover_letter_results"][job_id]

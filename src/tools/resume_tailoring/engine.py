@@ -143,9 +143,15 @@ def run_resume_tailoring_tool(
                 "revision_requested": bool(inp.revision_feedback),
             },
         ) as editing_span:
+            preferred_first_project = _preferred_first_project(
+                inp.revision_feedback
+            )
             structure = parse_resume_structure(
                 source,
-                require_projects=inp.fit_analysis.project_swap is not None,
+                require_projects=(
+                    inp.fit_analysis.project_swap is not None
+                    or preferred_first_project is not None
+                ),
             )
             edits: list[SourceEdit] = []
             changes: list[ChangeLogEntry] = []
@@ -267,7 +273,11 @@ def run_resume_tailoring_tool(
                     )
                     incremental_before = incremental_after
 
-            if inp.fit_analysis.project_swap is not None:
+            # An explicit human ordering instruction supersedes the automated
+            # fit-analysis swap for this revision. Applying both would either
+            # remove the requested project or create overlapping LaTeX edits.
+            skip_project_swap = preferred_first_project is not None
+            if inp.fit_analysis.project_swap is not None and not skip_project_swap:
                 project_edit, record = _plan_project_swap(
                     source, structure, inp, evidence
                 )
@@ -295,6 +305,39 @@ def run_resume_tailoring_tool(
                             source_location=project_edit.location,
                             validation_result=(
                                 "pending structural and portfolio validation"
+                            ),
+                            )
+                        )
+            if preferred_first_project:
+                order_edit, order_evidence_id = _plan_project_reorder(
+                    source,
+                    structure,
+                    preferred_first_project,
+                    evidence,
+                )
+                if order_edit is not None:
+                    edits.append(order_edit)
+                    changes.append(
+                        ChangeLogEntry(
+                            change_id=f"{inp.job.job_id}-project-order",
+                            section="projects",
+                            description=(
+                                f'Moved "{preferred_first_project}" to the first '
+                                "project position."
+                            ),
+                            before_text=order_edit.target.text(source),
+                            after_text=order_edit.replacement,
+                            reason=(
+                                "Apply the candidate's explicit project-order "
+                                "preference from human review."
+                            ),
+                            evidence_ids=[
+                                job_evidence_id(inp.job, "description"),
+                                order_evidence_id,
+                            ],
+                            source_location="Projects section ordering",
+                            validation_result=(
+                                "pending structural and evidence validation"
                             ),
                         )
                     )
@@ -363,7 +406,10 @@ def run_resume_tailoring_tool(
             _validate_change_log(changes, all_evidence, inp)
         success = page_count == 1 and pdf_path.is_file() and not compile_errors
         feedback_satisfied, feedback_checks = _check_revision_feedback(
-            inp.revision_feedback, changes, all_evidence
+            inp.revision_feedback,
+            changes,
+            all_evidence,
+            final_source=_compiled_source,
         )
         return TailorResumeOutput(
             job_id=inp.job.job_id,
@@ -755,6 +801,87 @@ def _plan_project_swap(
     )
 
 
+_FIRST_PROJECT_PATTERNS = (
+    re.compile(
+        r"(?:^|[.!?]\s+)(?P<name>[^.!?\n]+?)\s+should\s+be\s+"
+        r"(?:the\s+)?(?:first|1st)\s+project\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:candidate\s+prefers?|i\s+prefer)\s+(?P<name>.+?)\s+"
+        r"(?:to\s+be|as)\s+(?:the\s+)?(?:first|1st)\s+project\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:make|move|put)\s+(?P<name>.+?)\s+"
+        r"(?:(?:the\s+)?(?:first|1st)\s+project|"
+        r"(?:first|1st)\s+in\s+(?:the\s+)?projects?|"
+        r"to\s+the\s+top\s+of\s+(?:the\s+)?projects?)\b",
+        re.IGNORECASE,
+    ),
+)
+
+
+def _preferred_first_project(feedback: str | None) -> str | None:
+    """Extract an explicit project-order preference from reviewer feedback."""
+
+    normalized = " ".join((feedback or "").split()).strip()
+    for pattern in _FIRST_PROJECT_PATTERNS:
+        match = pattern.search(normalized)
+        if match:
+            return match.group("name").strip(" \"'.,:;-")
+    return None
+
+
+def _plan_project_reorder(
+    source: str,
+    structure: ResumeStructure,
+    preferred_name: str,
+    evidence: dict[str, EvidenceItem],
+) -> tuple[SourceEdit | None, str]:
+    """Move an existing evidenced project to the first project slot."""
+
+    matching = [
+        entry
+        for entry in structure.project_entries
+        if entry.name.casefold() == preferred_name.casefold()
+    ]
+    if len(matching) != 1:
+        raise TailoringError(
+            f'Reviewer-preferred project "{preferred_name}" was not found uniquely '
+            "in the source resume."
+        )
+    supporting = next(
+        (
+            item.evidence_id
+            for item in evidence.values()
+            if evidence_supports_project(item, preferred_name)
+        ),
+        None,
+    )
+    if supporting is None:
+        raise TailoringError(
+            f'Reviewer-preferred project "{preferred_name}" has no candidate evidence.'
+        )
+    target = matching[0]
+    entries = list(structure.project_entries)
+    if entries[0] is target:
+        return None, supporting
+    start = entries[0].block_range.start
+    end = entries[-1].block_range.end
+    reordered = [target, *[entry for entry in entries if entry is not target]]
+    replacement = "".join(entry.block_range.text(source) for entry in reordered)
+    return (
+        SourceEdit(
+            TextRange(start, end),
+            replacement,
+            "projects",
+            "Projects section ordering",
+        ),
+        supporting,
+    )
+
+
 def _render_project_like_existing(
     source: str, entry: ProjectEntry, record: PortfolioRecord
 ) -> str:
@@ -1123,7 +1250,16 @@ def _validate_change_log(
             raise TailoringError(
                 f"Change {change.change_id!r} lacks job-posting evidence."
             )
-        if change.section == "projects" and "portfolio" not in sources:
+        is_project_reorder = (
+            change.section == "projects"
+            and change.description.startswith("Moved ")
+            and change.description.endswith("project position.")
+        )
+        if (
+            change.section == "projects"
+            and not is_project_reorder
+            and "portfolio" not in sources
+        ):
             raise TailoringError(
                 f"Project change {change.change_id!r} lacks portfolio evidence."
             )
@@ -1179,10 +1315,16 @@ def _validate_change_log(
                         "not supported by the cited job requirement."
                     )
         elif change.section == "projects":
-            added_name_match = re.search(r'with "([^"]+)"', change.description)
-            added_name = (
-                added_name_match.group(1) if added_name_match else change.after_text
-            )
+            if is_project_reorder:
+                name_match = re.search(r'^Moved "([^"]+)"', change.description)
+                added_name = name_match.group(1) if name_match else ""
+            else:
+                added_name_match = re.search(r'with "([^"]+)"', change.description)
+                added_name = (
+                    added_name_match.group(1)
+                    if added_name_match
+                    else change.after_text
+                )
             if not any(
                 evidence_supports_project(item, added_name) for item in candidate_items
             ):
@@ -1310,6 +1452,8 @@ def _check_revision_feedback(
     feedback: str | None,
     changes: list[ChangeLogEntry],
     evidence: dict[str, EvidenceItem],
+    *,
+    final_source: str | None = None,
 ) -> tuple[bool | None, list[str]]:
     """Return deterministic checks used to decide whether another round is needed."""
 
@@ -1326,7 +1470,26 @@ def _check_revision_feedback(
         ) < sum(len(change.before_text) for change in experience)
         checks.append(f"conciseness requested: {'met' if concise else 'not met'}")
         satisfied = satisfied and concise
-    if re.search(r"\b(project|swap)\b", feedback, re.IGNORECASE):
+    preferred_first = _preferred_first_project(feedback)
+    if preferred_first:
+        first_project = None
+        if final_source:
+            final_structure = parse_resume_structure(
+                final_source,
+                require_projects=True,
+            )
+            if final_structure.project_entries:
+                first_project = final_structure.project_entries[0].name
+        order_met = bool(
+            first_project
+            and first_project.casefold() == preferred_first.casefold()
+        )
+        checks.append(
+            f'first project "{preferred_first}": '
+            f"{'met' if order_met else 'not met'}"
+        )
+        satisfied = satisfied and order_met
+    elif re.search(r"\b(project|swap)\b", feedback, re.IGNORECASE):
         project_changed = any(change.section == "projects" for change in changes)
         checks.append(
             f"project change requested: {'met' if project_changed else 'not met'}"

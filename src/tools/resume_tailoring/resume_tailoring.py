@@ -17,13 +17,13 @@ from src.tools.resume_tailoring.contracts import (
     TailorResumeOutput,
     TailoringError,
 )
+from src.tools.resume_tailoring.compilation import compile_one_page
 from src.tools.resume_tailoring.latex_structure import (
     LatexStructureError,
     parse_resume_structure,
 )
 from src.tracing.langfuse import TraceManager
 
-_engine_compile_one_page = _engine._compile_one_page
 _failure = _engine._failure
 _build_summary = _engine._build_summary
 _select_achievement = _engine._select_achievement
@@ -85,13 +85,14 @@ def _compile_one_page(
     """Compile through the engine while preserving the public monkeypatch seam."""
 
     _engine._run_pdflatex = _run_pdflatex
-    return _engine_compile_one_page(
+    return compile_one_page(
         source,
         tex_path,
         pdf_path,
         tracer=tracer,
         trace_metadata=trace_metadata,
         revision=revision,
+        latex_runner=_run_pdflatex,
     )
 
 

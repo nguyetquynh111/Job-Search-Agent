@@ -813,6 +813,101 @@ def test_tailoring_changes_only_two_targeted_experience_bullets(
     )
 
 
+def test_review_preference_keeps_cardiovascular_as_first_project(
+    tmp_path: Path, monkeypatch
+) -> None:
+    source = tmp_path / "source.tex"
+    source.write_text(Path("data/resume.tex").read_text(encoding="utf-8"))
+    payload = _tool_resume_tailoring_input(source)
+    cardiovascular = EvidenceItem(
+        evidence_id="portfolio-cardiovascular",
+        source="portfolio",
+        text=(
+            "PROJECT_NAME: Cardiovascular Flow and Stenosis Analysis\n"
+            "SUMMARY: Analyzed cardiovascular flow and stenosis."
+        ),
+        tags=["Medical Computer Vision"],
+        metadata={
+            "project_name": "Cardiovascular Flow and Stenosis Analysis",
+        },
+    )
+    payload = payload.model_copy(
+        update={
+            "candidate_evidence": [*payload.candidate_evidence, cardiovascular],
+            "revision_feedback": (
+                "Candidate prefers Cardiovascular Flow and Stenosis Analysis "
+                "to be the first project."
+            ),
+        }
+    )
+    monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "outputs"))
+
+    def fake_compile(text: str, tex_path: Path, pdf_path: Path):
+        tex_path.write_text(text, encoding="utf-8")
+        pdf_path.write_bytes(b"%PDF-1.4 test")
+        return 1, [], text
+
+    monkeypatch.setattr(tailoring, "_compile_one_page", fake_compile)
+
+    result = tailoring.run_resume_tailoring_tool(payload)
+
+    assert result.status == "OK"
+    assert result.revision_feedback_satisfied is True
+    assert any("first project" in check and "met" in check for check in result.revision_feedback_checks)
+    tailored = Path(result.output_tex_path).read_text(encoding="utf-8")
+    projects = parse_resume_structure(tailored, require_projects=True).project_entries
+    assert projects[0].name == "Cardiovascular Flow and Stenosis Analysis"
+    assert "AI CRM Platform" not in tailored
+
+
+def test_review_should_be_1st_project_reorders_requested_project(
+    tmp_path: Path, monkeypatch
+) -> None:
+    source = tmp_path / "source.tex"
+    source.write_text(Path("data/resume.tex").read_text(encoding="utf-8"))
+    payload = _tool_resume_tailoring_input(source)
+    chatbot = EvidenceItem(
+        evidence_id="portfolio-chatbot",
+        source="portfolio",
+        text=(
+            "PROJECT_NAME: No-Code LLM Chatbot Builder\n"
+            "SUMMARY: Built an agentic RAG chatbot platform."
+        ),
+        tags=["Agentic AI", "RAG"],
+        metadata={"project_name": "No-Code LLM Chatbot Builder"},
+    )
+    payload = payload.model_copy(
+        update={
+            "candidate_evidence": [*payload.candidate_evidence, chatbot],
+            "revision_feedback": (
+                "Not enough agentic skills. "
+                "No-Code LLM Chatbot Builder should be the 1st project"
+            ),
+        }
+    )
+    monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "outputs"))
+
+    def fake_compile(text: str, tex_path: Path, pdf_path: Path):
+        tex_path.write_text(text, encoding="utf-8")
+        pdf_path.write_bytes(b"%PDF-1.4 test")
+        return 1, [], text
+
+    monkeypatch.setattr(tailoring, "_compile_one_page", fake_compile)
+
+    result = tailoring.run_resume_tailoring_tool(payload)
+
+    assert result.status == "OK"
+    assert any(
+        'first project "No-Code LLM Chatbot Builder": met' == check
+        for check in result.revision_feedback_checks
+    )
+    tailored = Path(result.output_tex_path).read_text(encoding="utf-8")
+    projects = parse_resume_structure(tailored, require_projects=True).project_entries
+    assert projects[0].name == "No-Code LLM Chatbot Builder"
+    assert any(change.change_id.endswith("-project-order") for change in result.change_log)
+    assert not any(change.change_id.endswith("-project-swap") for change in result.change_log)
+
+
 def test_tailoring_reports_compile_failure_honestly(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -1060,7 +1155,7 @@ def test_unsupported_project_name_in_experience_bullet_is_rejected() -> None:
         tailoring._validate_change_log([change], evidence, payload)
 
 
-def test_compilation_trace_records_command_result_and_page_validation(
+def test_compilation_helpers_do_not_create_internal_trace_spans(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     tex_path = tmp_path / "resume.tex"
@@ -1087,17 +1182,4 @@ def test_compilation_trace_records_command_result_and_page_validation(
 
     assert pages == 1
     assert errors == []
-    compilation = next(
-        event for event in tracer.events if event.name == "resume_tailoring.compile_pdf"
-    )
-    page_check = next(
-        event
-        for event in tracer.events
-        if event.name == "resume_tailoring.validate_page_count"
-    )
-    assert compilation.input["command"][0] == "pdflatex"
-    assert compilation.output["result"] == "success"
-    assert compilation.metadata["job_id"] == "J900"
-    assert compilation.metadata["resume_id"] == "resume-J900"
-    assert page_check.output["page_count"] == 1
-    assert page_check.output["exactly_one_page"] is True
+    assert [event.name for event in tracer.events] == ["Job Search Agent Run"]

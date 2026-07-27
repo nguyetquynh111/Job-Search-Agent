@@ -52,8 +52,21 @@ project_swap (null or {"remove_project": string or null, "add_project": string, 
 Format each skill claim as "<Skill>: <reason>".
 
 EVERY one of those seven fields is a JSON ARRAY, even when it holds exactly one \
-element — write "seniority": [{...}], NEVER "seniority": {...}. Only project_swap \
-is an object or null. Shape of a valid response:
+element — write "seniority": [{...}], NEVER "seniority": {...}. In particular, \
+project_analysis MUST ALWAYS be a JSON array, even when only one project is \
+discussed:
+
+"project_analysis": [
+  {
+    "claim": "...",
+    "evidence_ids": ["..."],
+    "confidence": 0.8,
+    "notes": "verdict=match; ..."
+  }
+]
+
+NEVER return "project_analysis": {...}. Only project_swap is an object or null. \
+Shape of a valid response:
 
 {"job_id": "J001",
  "relevant_experience": [{"claim": "Senior AI Engineer at Acme: centered on \

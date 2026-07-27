@@ -7,7 +7,7 @@ from typing import Any, TypedDict
 from uuid import uuid4
 
 from src.agent.errors import ToolExecutionError
-from src.utils.paths import memory_path_for_run
+from src.config import get_config
 
 
 class Phase(StrEnum):
@@ -19,6 +19,7 @@ class Phase(StrEnum):
     FIT_ANALYSIS = "FIT_ANALYSIS"
     TAILOR = "TAILOR"
     HUMAN_REVIEW = "HUMAN_REVIEW"
+    REVISION = "REVISION"
     COVER_LETTERS = "COVER_LETTERS"
     COMPLETE = "COMPLETE"
     ERROR = "ERROR"
@@ -77,10 +78,17 @@ class AgentState(TypedDict, total=False):
     review_history: list[dict[str, Any]]
     interrupt_payload: dict[str, Any]
     review_feedback: dict[str, Any]
+    reviewer_feedback: str
+    generated_memory: str
     errors: list[dict[str, Any]]
 
     trace_id: str | None
     trace_url: str | None
+    trace_public: bool
+    trace_ingest_confirmed: bool
+    observation_count: int
+    trace_export_error: str | None
+    trace_debug_status: str | None
     output_manifest: dict[str, Any]
     review_trace_parent_id: str | None
     revision_trace_parent_id: str | None
@@ -108,7 +116,9 @@ def create_initial_state(
 
     resolved_run_id = run_id or f"run-{uuid4().hex[:12]}"
     resolved_thread_id = thread_id or f"thread-{uuid4().hex[:12]}"
-    resolved_memory_file = memory_file or str(memory_path_for_run(resolved_run_id))
+    # Candidate memory is deliberately shared across runs. Run artifacts remain
+    # isolated, but facts learned during review must be available at next startup.
+    resolved_memory_file = memory_file or str(get_config().memory_file)
     return AgentState(
         run_id=resolved_run_id,
         thread_id=resolved_thread_id,
@@ -144,9 +154,16 @@ def create_initial_state(
         tool_history=[],
         agent_decisions=[],
         review_history=[],
+        reviewer_feedback="",
+        generated_memory="",
         errors=[],
         trace_id=None,
         trace_url=None,
+        trace_public=False,
+        trace_ingest_confirmed=False,
+        observation_count=0,
+        trace_export_error=None,
+        trace_debug_status=None,
         output_manifest={},
         review_trace_parent_id=None,
         revision_trace_parent_id=None,

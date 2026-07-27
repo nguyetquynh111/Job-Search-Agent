@@ -7,6 +7,7 @@ import os
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from pydantic import Field, ValidationError
@@ -104,12 +105,13 @@ class DeepInfraToolSelectionModel:
                 ),
             ),
         ]
+        generation_started_at = datetime.now(UTC)
         try:
             response = llm.invoke(messages)
         except Exception as exc:
             tracer.record_generation(
                 {"purpose": "orchestration_tool_selection"},
-                name="orchestration.model_decision",
+                name="Workflow Decision LLM",
                 model=model_name,
                 messages=messages,
                 response={"error_type": exc.__class__.__name__},
@@ -120,6 +122,7 @@ class DeepInfraToolSelectionModel:
                     "base_url": config.deepinfra_base_url,
                     "available_tools": list(available_tools),
                 },
+                start_time=generation_started_at,
             )
             raise
         content = str(getattr(response, "content", "") or "")
@@ -129,12 +132,13 @@ class DeepInfraToolSelectionModel:
                 "purpose": "orchestration_tool_selection",
                 "available_tools": list(available_tools),
             },
-            name="orchestration.model_decision",
+            name="Workflow Decision LLM",
             model=model_name,
             messages=messages,
             response={"content": content, "tool_calls": _jsonable(tool_calls)},
             usage=_usage(response),
             model_parameters={"temperature": 0, "base_url": config.deepinfra_base_url},
+            start_time=generation_started_at,
         )
         if len(tool_calls) != 1:
             if content.strip():

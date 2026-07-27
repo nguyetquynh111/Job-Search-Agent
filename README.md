@@ -52,24 +52,6 @@ Check that the environment is ready:
 python tests/preflight.py
 ```
 
-## Run The App
-
-```bash
-python -m streamlit run app/app.py
-```
-
-Open the Streamlit URL, usually `http://localhost:8501`.
-
-In the app, upload:
-
-- `data/jobs.csv`
-- `data/preferences.yaml`
-- `data/resume.tex`
-- `data/portfolio.txt`
-
-Then start the search, review the tailored resume drafts, and download the final
-application package.
-
 ## Run The Production Workflow
 
 Use this for a full live run with model tool selection and Langfuse tracing:
@@ -84,6 +66,19 @@ The runner creates a run ID automatically, such as
 (`outputs/<run-id>/`), checkpoints, and tracing metadata.
 
 The command fails fast if required live credentials or `pdflatex` are missing.
+
+## Run The Web App
+
+Start the Streamlit interface from the repository root:
+
+```bash
+streamlit run app/streamlit_app.py
+```
+
+The app provides file uploads, concise live status, one combined Top 3 resume
+review gate, application-package downloads, and expandable run evidence. It uses the same
+workflow, environment variables, artifacts, and `pdflatex` dependency as the
+production runner.
 
 ## Input Files
 

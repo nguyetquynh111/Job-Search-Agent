@@ -21,7 +21,7 @@ from src.utils.job_evidence import (
     job_evidence_id,
     job_skill_evidence_id,
 )
-from src.utils.latex import escape_latex, pdf_page_count, pdflatex_command, run_pdflatex
+from src.utils.latex import escape_latex, pdf_page_count, run_pdflatex
 from src.utils.paths import job_output_dir
 from src.utils.skill_matching import (
     canonicalize,
@@ -261,7 +261,7 @@ def _build_letter(
     if achievements:
         sentences = []
         for item in achievements[:2]:
-            sentences.append(f"{_clean_sentence(item.text)} ({item.evidence_id}).")
+            sentences.append(f"{_clean_sentence(item.text)}.")
         body_paragraphs.append(
             "In my recent work, "
             + " ".join(sentences)
@@ -364,8 +364,9 @@ def _select_achievement_evidence(
         overlap = sum(
             1 for needle in needles if needle and needle in item.text.casefold()
         )
-        if overlap:
-            scored.append((overlap, item))
+        # Prefer direct skill overlap, but always retain grounded experience as
+        # a fallback so every letter maps real candidate work to the role.
+        scored.append((overlap, item))
 
     scored.sort(key=lambda pair: pair[0], reverse=True)
     # Use at most one experience and one project example.
@@ -500,8 +501,6 @@ def _compile_one_page(
     tracer: TraceManager | None = None,
     trace_metadata: dict[str, object] | None = None,
 ) -> tuple[int | None, list[str]]:
-    active = tracer or TraceManager(enabled=False)
-    metadata = dict(trace_metadata or {})
     errors: list[str] = []
     working_letter = letter
     page_count: int | None = None
@@ -523,72 +522,21 @@ def _compile_one_page(
         tex_source = _render_tex(working_letter, job, shrink_level)
         tex_path.write_text(tex_source, encoding="utf-8")
 
-        compile_span = active.start_span(
-            "cover_letter.compile_pdf",
-            {**metadata, "attempt": attempt + 1},
-            input={
-                "engine": "pdflatex",
-                "command": pdflatex_command(tex_path),
-                "tex_file": tex_path.name,
-                "source_length": len(tex_source),
-            },
-        )
         run_errors = _run_pdflatex(tex_path)
         if run_errors:
-            active.end_span(
-                compile_span,
-                status="ERROR",
-                error_type="LatexCompilationError",
-                output={
-                    "result": "error",
-                    "errors": run_errors,
-                    "pdf_created": pdf_path.is_file(),
-                },
-            )
             errors.extend(run_errors)
             return None, errors
         pdf_created = pdf_path.is_file()
-        active.end_span(
-            compile_span,
-            status="OK" if pdf_created else "ERROR",
-            error_type=None if pdf_created else "MissingPdf",
-            output={
-                "result": "success" if pdf_created else "missing_pdf",
-                "pdf_created": pdf_created,
-                "pdf_file": pdf_path.name,
-            },
-        )
 
         if not pdf_created:
             errors.append(f"pdflatex reported success but {pdf_path} was not produced.")
             return None, errors
 
-        verify_span = active.start_span(
-            "cover_letter.validate_page_count",
-            {**metadata, "attempt": attempt + 1},
-            input={"pdf_file": pdf_path.name, "required_page_count": 1},
-        )
         try:
             page_count = pdf_page_count(pdf_path)
         except Exception as exc:  # noqa: BLE001 - report invalid generated PDFs
-            active.end_span(
-                verify_span,
-                status="ERROR",
-                error_type=exc.__class__.__name__,
-                output={"valid_pdf": False},
-            )
             errors.append(f"Generated cover-letter PDF is invalid: {exc}")
             return None, errors
-        active.end_span(
-            verify_span,
-            status="OK" if page_count == 1 else "ERROR",
-            error_type=None if page_count == 1 else "PageCountMismatch",
-            output={
-                "valid_pdf": True,
-                "page_count": page_count,
-                "exactly_one_page": page_count == 1,
-            },
-        )
         if page_count == 1:
             letter.evidence_used = working_letter.evidence_used
             return 1, errors

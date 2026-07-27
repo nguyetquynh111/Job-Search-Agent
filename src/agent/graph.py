@@ -6,8 +6,9 @@ You are the only LLM agent in this workflow.
 from __future__ import annotations
 
 import logging
-import json
 from collections.abc import Callable, Mapping
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 from pathlib import Path
 from typing import Any
 
@@ -44,7 +45,11 @@ from src.utils.input_loading import (
 from src.utils.job_evidence import build_job_evidence
 from src.utils.latex import pdf_page_count
 from src.utils.evidence_validation import job_evidence_supports_skill
-from src.review.human_review import build_review_payload, normalize_review_feedback
+from src.review.human_review import (
+    build_review_payload,
+    normalize_combined_review_submission,
+    normalize_review_feedback,
+)
 from src.review.memory import (
     JSONMemoryStore,
     MemoryFact,
@@ -78,6 +83,7 @@ from src.tracing.langfuse import TraceManager
 from src.utils.output_validation import (
     sanitize_public_artifact_references,
     write_and_validate_outputs,
+    write_run_files,
 )
 
 logger = logging.getLogger(__name__)
@@ -90,6 +96,7 @@ def build_agent_graph(
     checkpointer: Any | None = None,
     tracer: TraceManager | None = None,
     tool_selection_model: ToolSelectionModel | None = None,
+    progress_callback: Callable[[AgentState], None] | None = None,
 ) -> Any:
     """Build the explicit workflow that dispatches required work via the registry."""
 
@@ -112,12 +119,41 @@ def build_agent_graph(
             },
             input={"input_paths": paths},
         )
-        load_span = trace_manager.start_span(
-            "initialize.load_inputs",
-            input={"input_paths": paths},
+        dataset_span = trace_manager.start_span(
+            "Analyze Dataset",
+            metadata={"stage": "initialization"},
+            input={"jobs_path": paths.get("jobs_path", "data/jobs.csv")},
         )
         try:
             jobs = load_jobs_csv(paths.get("jobs_path", "data/jobs.csv"))
+        except Exception as exc:
+            trace_manager.end_span(
+                dataset_span,
+                status="ERROR",
+                error_type=exc.__class__.__name__,
+                output={"error": str(exc)},
+            )
+            raise
+        trace_manager.end_span(
+            dataset_span,
+            metadata={"job_count": len(jobs)},
+            output={
+                "job_count": len(jobs),
+                "jobs": [job.model_dump(mode="json") for job in jobs],
+            },
+        )
+        profile_span = trace_manager.start_span(
+            "Candidate Profile",
+            metadata={"stage": "initialization"},
+            input={
+                "candidate_profile_path": paths.get(
+                    "candidate_profile_path", "data/preferences.yaml"
+                ),
+                "resume_path": paths.get("resume_path", "data/resume.tex"),
+                "portfolio_path": paths.get("portfolio_path", "data/portfolio.txt"),
+            },
+        )
+        try:
             profile = load_candidate_profile(
                 paths.get("candidate_profile_path", "data/preferences.yaml")
             )
@@ -130,20 +166,12 @@ def build_agent_graph(
             )
         except Exception as exc:
             trace_manager.end_span(
-                load_span,
+                profile_span,
                 status="ERROR",
                 error_type=exc.__class__.__name__,
                 output={"error": str(exc)},
             )
             raise
-        trace_manager.end_span(
-            load_span,
-            output={
-                "job_count": len(jobs),
-                "portfolio_project_count": len(portfolio.projects),
-                "resume_evidence_count": len(resume.evidence_items),
-            },
-        )
         profile = profile.model_copy(
             update={
                 "resume_content": resume.plain_text,
@@ -167,17 +195,24 @@ def build_agent_graph(
             "memory_file",
             state.get("memory_file", str(get_config().memory_file)),
         )
-        memory_span = trace_manager.start_span(
-            "memory.read",
-            input={"memory_file": memory_file},
-        )
         memory_facts = JSONMemoryStore(memory_file).load()
-        trace_manager.end_span(
-            memory_span,
-            output={"memory_fact_count": len(memory_facts)},
-        )
         trace_manager.register_personal_data(profile.name, profile.email)
-        return {
+        trace_manager.end_span(
+            profile_span,
+            metadata={
+                "portfolio_project_count": len(portfolio.projects),
+                "resume_evidence_count": len(resume.evidence_items),
+                "memory_fact_count": len(memory_facts),
+            },
+            output={
+                "candidate_profile": profile.model_dump(mode="json"),
+                "portfolio": portfolio.model_dump(mode="json"),
+                "resume_path": resume_path,
+                "memory_file": memory_file,
+                "memory_fact_count": len(memory_facts),
+            },
+        )
+        initialized: AgentState = {
             "phase": Phase.FILTER.value,
             "status": RunStatus.RUNNING.value,
             "jobs": [job.model_dump() for job in jobs],
@@ -190,6 +225,8 @@ def build_agent_graph(
             "trace_url": trace_manager.trace_url,
             "langfuse_status": trace_manager.status_message,
         }
+        _publish_progress(progress_callback, {**state, **initialized})
+        return initialized
 
     def run_pre_review_tools(state: AgentState) -> AgentState:
         """Let the agent iterate until the human-review gate is ready."""
@@ -205,6 +242,7 @@ def build_agent_graph(
             working,
             tracer=trace_manager,
             stop_condition=_ready_for_human_review,
+            progress_callback=progress_callback,
         )
 
         return {
@@ -222,148 +260,231 @@ def build_agent_graph(
         }
 
     def human_review(state: AgentState) -> AgentState:
-        """Pause exactly once after all three resume drafts are ready."""
+        """Pause at the one combined gate whenever the drafts need review."""
 
-        if state.get("review_history"):
-            raise ToolExecutionError("The workflow permits only one review pause.")
         payload = build_review_payload(dict(state))
-        if not any(
-            event.name == "human_review_pause" for event in trace_manager.events
-        ):
-            span_id = trace_manager.start_span(
-                "human_review_pause",
-                input=payload.model_dump(),
-            )
-            trace_manager.end_span(span_id)
+        waiting = {
+            **state,
+            "phase": Phase.HUMAN_REVIEW.value,
+            "status": RunStatus.WAITING_FOR_REVIEW.value,
+            "interrupt_payload": payload.model_dump(),
+        }
+        # Execution stops at interrupt(), so sync queued observations before
+        # the review UI exposes the public trace link.
+        trace_manager.flush()
+        _publish_progress(progress_callback, waiting)
         review_feedback = interrupt(payload.model_dump())
+        span_id = trace_manager.start_span(
+            "Human Review",
+            input=payload.model_dump(),
+            metadata={"review_round": payload.review_round},
+        )
+        trace_manager.end_span(
+            span_id,
+            output={
+                "action": review_feedback.get("action"),
+                "decisions": review_feedback.get("decisions", {}),
+                "review_comment": review_feedback.get("reviewer_feedback", ""),
+            },
+        )
         return {
             "interrupt_payload": payload.model_dump(),
             "review_feedback": review_feedback,
             "status": RunStatus.RUNNING.value,
         }
 
-    def run_post_review_tools(state: AgentState) -> AgentState:
-        """Let the same agent iterate after the single human-review pause."""
+    def process_review(state: AgentState) -> AgentState:
+        """Process all three per-resume decisions from the workflow's only pause."""
 
         top_job_ids = list(state_value(state, "top_3_job_ids"))
-        feedback = normalize_review_feedback(
-            state.get("review_feedback", {}),
-            expected_job_ids=top_job_ids,
+        raw_feedback = dict(state.get("review_feedback", {}))
+        if "decisions" in raw_feedback:
+            feedback = normalize_review_feedback(raw_feedback, top_job_ids)
+            decisions = {
+                job_id: decision.model_dump()
+                for job_id, decision in feedback.decisions.items()
+            }
+        else:
+            # Keep the controller API compatible with older console clients while
+            # converting their one batch action into the per-resume contract.
+            submission = normalize_combined_review_submission(
+                raw_feedback,
+                top_job_ids,
+            )
+            affected = set(submission.affected_job_ids)
+            decisions = {
+                job_id: {
+                    "decision": (
+                        "reject"
+                        if submission.action == "request_revision"
+                        and job_id in affected
+                        else "approve"
+                    ),
+                    "comment": (
+                        submission.reviewer_feedback if job_id in affected else ""
+                    ),
+                }
+                for job_id in top_job_ids
+            }
+
+        memory_facts, written_fact_ids, memory_failures = _store_review_memory(
+            state,
+            decisions,
+            tracer=trace_manager,
         )
-        decisions = {
-            job_id: decision.model_dump()
-            for job_id, decision in feedback.decisions.items()
-        }
-        review_span = trace_manager.start_span(
-            "human_review_decisions",
-            input={
-                "interrupt_payload": state.get("interrupt_payload", {}),
-                "decisions": decisions,
-            },
-        )
-        trace_manager.end_span(
-            review_span,
-            output={
-                "approved_job_ids": [
-                    job_id
-                    for job_id, decision in decisions.items()
-                    if decision["decision"] == "approve"
-                ],
-                "rejected_job_ids": [
-                    job_id
-                    for job_id, decision in decisions.items()
-                    if decision["decision"] == "reject"
-                ],
-            },
-        )
-        rejected = [
-            job_id
-            for job_id, decision in feedback.decisions.items()
-            if decision.decision == "reject"
-        ]
-        memory_facts, new_fact_ids, memory_failures = _store_review_memory(
-            state, decisions, tracer=trace_manager
-        )
-        memory_propagation = _plan_memory_propagation(
+        propagation_actions = _plan_memory_propagation(
             state,
             decisions,
             memory_facts,
-            new_fact_ids,
+            written_fact_ids,
             tracer=trace_manager,
         )
-        pending_propagation = [
+        propagation_job_ids = [
             action["job_id"]
-            for action in memory_propagation
+            for action in propagation_actions
             if action["status"] == "pending_tailoring"
         ]
-        working: AgentState = {
-            **state,
+        propagation_feedback = {
+            action["job_id"]: action["feedback"]
+            for action in propagation_actions
+            if action.get("feedback")
+        }
+        rejected_job_ids = [
+            job_id
+            for job_id, decision in decisions.items()
+            if decision["decision"] == "reject"
+        ]
+        needs_rework = bool(rejected_job_ids or propagation_job_ids)
+        return {
             "phase": (
-                Phase.TAILOR.value
-                if rejected or pending_propagation
-                else Phase.COVER_LETTERS.value
+                Phase.REVISION.value if needs_rework else Phase.COVER_LETTERS.value
             ),
             "status": RunStatus.RUNNING.value,
-            "memory_facts": memory_facts,
-            "new_memory_fact_ids": new_fact_ids,
-            "memory_validation_failures": memory_failures,
             "review_decisions": decisions,
             "approved_job_ids": top_job_ids,
-            "pending_revision_job_ids": rejected,
-            "memory_propagation_job_ids": pending_propagation,
-            "memory_propagation_feedback_by_job": {
-                action["job_id"]: action["feedback"]
-                for action in memory_propagation
-                if action.get("feedback")
-            },
-            "memory_propagation_actions": memory_propagation,
-            "revision_round_job_ids": rejected,
+            "pending_revision_job_ids": rejected_job_ids,
+            "revision_round_job_ids": rejected_job_ids,
+            "memory_facts": memory_facts,
+            "new_memory_fact_ids": list(
+                dict.fromkeys(
+                    [*state.get("new_memory_fact_ids", []), *written_fact_ids]
+                )
+            ),
+            "memory_validation_failures": memory_failures,
+            "memory_propagation_actions": propagation_actions,
+            "memory_propagation_job_ids": propagation_job_ids,
+            "memory_propagation_feedback_by_job": propagation_feedback,
+        }
+
+    def revise_resumes(state: AgentState) -> AgentState:
+        """Apply feedback, retry at most twice, and never open another human gate."""
+
+        working: AgentState = {
+            **state,
+            "phase": Phase.REVISION.value,
+            "status": RunStatus.RUNNING.value,
             "tool_history": list(state.get("tool_history", [])),
             "agent_decisions": list(state.get("agent_decisions", [])),
             "review_actions": {},
             "revision_round_logs": {},
         }
+        _publish_progress(progress_callback, working)
+        _run_agent_loop(
+            selector,
+            working,
+            tracer=trace_manager,
+            stop_condition=lambda current: (
+                not _pending_revision_job_ids(current)
+                or current.get("status") == RunStatus.FAILED_REVIEW.value
+            ),
+            progress_callback=progress_callback,
+        )
+        if working.get("status") == RunStatus.FAILED_REVIEW.value:
+            raise ToolExecutionError(
+                "Review feedback could not be satisfied within the maximum "
+                f"{MAX_REVISION_ROUNDS} revision rounds."
+            )
+        history = [
+            *state.get("review_history", []),
+            {
+                "review_round": 1,
+                "decisions": dict(state.get("review_decisions", {})),
+                "rejected_job_ids": list(state.get("revision_round_job_ids", [])),
+                "memory_writes": [
+                    fact
+                    for fact in state.get("memory_facts", [])
+                    if fact.get("fact_id") in set(state.get("new_memory_fact_ids", []))
+                ],
+                "affected_job_ids": list(state.get("revision_round_job_ids", [])),
+                "actions_taken": dict(working.get("review_actions", {})),
+                "revision_rounds": list(
+                    working.get("revision_round_logs", {}).values()
+                ),
+            },
+        ]
+        return {
+            "phase": Phase.COVER_LETTERS.value,
+            "status": RunStatus.RUNNING.value,
+            "revision_round": max(
+                [0, *working.get("revision_attempts_by_job", {}).values()]
+            ),
+            "tailoring_results": working.get("tailoring_results", {}),
+            "tool_history": working.get("tool_history", []),
+            "agent_decisions": working.get("agent_decisions", []),
+            "review_history": history,
+            "review_decisions": dict(state.get("review_decisions", {})),
+            "approved_job_ids": list(state.get("top_3_job_ids", [])),
+            "pending_revision_job_ids": [],
+            "memory_propagation_job_ids": [],
+        }
+
+    def approve_and_finish(state: AgentState) -> AgentState:
+        """Generate final PDFs and letters after the single review gate."""
+
+        top_job_ids = list(state_value(state, "top_3_job_ids"))
+        if _pending_revision_job_ids(state):
+            raise ToolExecutionError(
+                "Finalization cannot start while review rework is pending."
+            )
+        memory_facts = list(state.get("memory_facts", []))
+        new_fact_ids = list(state.get("new_memory_fact_ids", []))
+        working: AgentState = {
+            **state,
+            "phase": Phase.COVER_LETTERS.value,
+            "status": RunStatus.RUNNING.value,
+            "memory_facts": memory_facts,
+            "new_memory_fact_ids": new_fact_ids,
+            "tool_history": list(state.get("tool_history", [])),
+            "agent_decisions": list(state.get("agent_decisions", [])),
+        }
+        _publish_progress(progress_callback, working)
         _run_agent_loop(
             selector,
             working,
             tracer=trace_manager,
             stop_condition=_post_review_done,
+            progress_callback=progress_callback,
         )
-        review_actions = dict(working.get("review_actions", {}))
-        revision_round_logs = dict(working.get("revision_round_logs", {}))
-
-        review_history = [
-            {
-                "review_round": 1,
-                "decisions": decisions,
-                "rejected_job_ids": rejected,
-                "memory_writes": [
-                    fact
-                    for fact in memory_facts
-                    if fact["fact_id"] in set(new_fact_ids)
-                ],
-                "actions_taken": review_actions,
-                "memory_propagation": working.get("memory_propagation_actions", []),
-                "revision_rounds": list(revision_round_logs.values()),
-            }
-        ]
-        if working.get("status") == RunStatus.FAILED_REVIEW.value:
-            return {
-                "phase": Phase.HUMAN_REVIEW.value,
-                "status": RunStatus.FAILED_REVIEW.value,
-                "tailoring_results": working.get("tailoring_results", {}),
-                "tool_history": working.get("tool_history", []),
-                "agent_decisions": working.get("agent_decisions", []),
-                "review_history": review_history,
-                "errors": working.get("errors", []),
-                "memory_facts": memory_facts,
-                "new_memory_fact_ids": new_fact_ids,
-                "memory_validation_failures": memory_failures,
-            }
-
+        approval_record = {
+            "review_round": 1,
+            "action": "finalized_after_single_review",
+            "decisions": dict(state.get("review_decisions", {})),
+            "memory_writes": [
+                fact
+                for fact in memory_facts
+                if fact.get("fact_id") in set(new_fact_ids)
+            ],
+        }
+        review_history = [*state.get("review_history", []), approval_record]
         final_payload = {
             **state,
-            "review_decisions": decisions,
+            "trace_id": trace_manager.trace_id,
+            "trace_url": None,
+            "trace_public": trace_manager.trace_public,
+            "trace_ingest_confirmed": False,
+            "observation_count": 0,
+            "langfuse_status": trace_manager.status_message,
+            "review_decisions": working.get("review_decisions", {}),
             "approved_job_ids": top_job_ids,
             "tailoring_results": working.get("tailoring_results", {}),
             "cover_letter_results": working.get("cover_letter_results", {}),
@@ -373,58 +494,102 @@ def build_agent_graph(
             "review_history": review_history,
             "agent_decisions": working.get("agent_decisions", []),
         }
-        output_manifest = write_and_validate_outputs(final_payload)
-        trace_manager.update_run(
-            metadata={"status": RunStatus.COMPLETED.value},
-            output=sanitize_public_artifact_references({
+        final_outputs_span = trace_manager.start_span(
+            "Final Outputs",
+            metadata={"stage": "finalization"},
+            input={
                 "top_3_job_ids": top_job_ids,
-                "output_manifest": output_manifest,
-                "artifact_paths": _final_artifact_paths(
-                    output_manifest,
-                    working.get("tailoring_results", {}),
-                    working.get("cover_letter_results", {}),
-                ),
+                "resume_results": working.get("tailoring_results", {}),
                 "cover_letter_results": working.get("cover_letter_results", {}),
-                "review_history": review_history,
-                "memory_propagation": working.get("memory_propagation_actions", []),
-            }),
+            },
         )
-        _write_trace_events_snapshot(output_manifest, trace_manager)
-        trace_manager.flush()
+        try:
+            try:
+                output_manifest = write_and_validate_outputs(
+                    final_payload,
+                    persist_run_files=False,
+                )
+            except Exception as exc:
+                trace_manager.end_span(
+                    final_outputs_span,
+                    status="ERROR",
+                    error_type=exc.__class__.__name__,
+                    output={"error": str(exc)},
+                )
+                raise
+            final_output_summary = sanitize_public_artifact_references(
+                {
+                    "top_3_job_ids": top_job_ids,
+                    "output_manifest": output_manifest,
+                    "artifact_paths": _final_artifact_paths(
+                        output_manifest,
+                        working.get("tailoring_results", {}),
+                        working.get("cover_letter_results", {}),
+                    ),
+                    "cover_letter_results": working.get("cover_letter_results", {}),
+                    "review_history": review_history,
+                    "memory_update": approval_record,
+                }
+            )
+            trace_manager.end_span(
+                final_outputs_span,
+                output=final_output_summary,
+            )
+            trace_manager.update_run(
+                metadata={"status": RunStatus.COMPLETED.value},
+                output=final_output_summary,
+            )
+        finally:
+            # The root must be ended and OTEL must be flushed even when artifact
+            # validation or finalization raises. No completion manifest exists yet.
+            trace_manager.end_root_observation()
+            trace_manager.flush()
+
+        trace_manager.confirm_ingestion(timeout_seconds=20)
+        trace_fields = trace_manager.manifest_trace_fields()
+        final_payload.update(trace_fields)
+        final_payload["trace_events"] = [event.__dict__ for event in trace_manager.events]
+        output_manifest.update(trace_fields)
+        write_run_files(final_payload, output_manifest)
         return {
             "phase": Phase.COMPLETE.value,
             "status": RunStatus.COMPLETED.value,
-            "review_decisions": decisions,
+            "review_decisions": working.get("review_decisions", {}),
             "approved_job_ids": top_job_ids,
-            "revision_round": max(
-                (action["revision_round"] for action in review_actions.values()),
-                default=0,
-            ),
+            "revision_round": int(state.get("revision_round", 0)),
             "tailoring_results": working.get("tailoring_results", {}),
             "cover_letter_results": working.get("cover_letter_results", {}),
             "memory_facts": memory_facts,
             "new_memory_fact_ids": new_fact_ids,
-            "memory_validation_failures": memory_failures,
+            "memory_validation_failures": [],
             "review_history": review_history,
-            "memory_propagation_actions": working.get(
-                "memory_propagation_actions", []
-            ),
             "tool_history": working.get("tool_history", []),
             "agent_decisions": working.get("agent_decisions", []),
             "output_manifest": output_manifest,
-            "trace_url": trace_manager.trace_url,
+            **trace_fields,
             "langfuse_status": trace_manager.status_message,
         }
 
     graph.add_node("initialize", initialize)
     graph.add_node("run_pre_review_tools", run_pre_review_tools)
     graph.add_node("human_review", human_review)
-    graph.add_node("run_post_review_tools", run_post_review_tools)
+    graph.add_node("process_review", process_review)
+    graph.add_node("revise_resumes", revise_resumes)
+    graph.add_node("approve_and_finish", approve_and_finish)
     graph.add_edge(START, "initialize")
     graph.add_edge("initialize", "run_pre_review_tools")
     graph.add_edge("run_pre_review_tools", "human_review")
-    graph.add_edge("human_review", "run_post_review_tools")
-    graph.add_edge("run_post_review_tools", END)
+    graph.add_edge("human_review", "process_review")
+    graph.add_conditional_edges(
+        "process_review",
+        lambda state: state.get("phase"),
+        {
+            Phase.REVISION.value: "revise_resumes",
+            Phase.COVER_LETTERS.value: "approve_and_finish",
+        },
+    )
+    graph.add_edge("revise_resumes", "approve_and_finish")
+    graph.add_edge("approve_and_finish", END)
     return graph.compile(checkpointer=checkpointer)
 
 
@@ -434,6 +599,7 @@ def _run_agent_loop(
     *,
     tracer: TraceManager,
     stop_condition: Callable[[AgentState], bool],
+    progress_callback: Callable[[AgentState], None] | None = None,
     max_iterations: int = 30,
     max_invalid_calls: int = 3,
 ) -> None:
@@ -445,9 +611,14 @@ def _run_agent_loop(
             return
         current_summary = _decision_state_summary(state)
         decision_phase = state.get("phase")
+        decision_name = _decision_span_name(decision_phase)
+        available_tools = _available_tool_names()
         span_id = tracer.start_span(
-            "orchestration.agent_decision",
-            metadata={"phase": decision_phase},
+            decision_name,
+            metadata={
+                "phase": decision_phase,
+                "workflow_stage": _workflow_stage_label(decision_phase),
+            },
             input={
                 "current_state": current_summary,
                 "available_tools": _tool_definition_summary(),
@@ -457,7 +628,7 @@ def _run_agent_loop(
         call: ModelToolCall | None = None
         try:
             call = selector.select_tool(
-                available_tools=_available_tool_names(),
+                available_tools=available_tools,
                 tool_definitions=get_tool_definitions(),
                 state_summary=current_summary,
                 tracer=tracer,
@@ -476,10 +647,12 @@ def _run_agent_loop(
                 tracer.end_span(
                     span_id,
                     output={
+                        "decision": "retry_tool_selection",
+                        "reason": _decision_reason(decision_phase, call.name),
+                        "available_tools": available_tools,
                         "selected_tool": call.name,
                         "arguments": call.arguments,
-                        "decision_rationale": call.rationale,
-                        "result": validation,
+                        "validation": validation,
                     },
                 )
                 if len(invalid_results) >= max_invalid_calls:
@@ -488,16 +661,50 @@ def _run_agent_loop(
                         + "; ".join(item["message"] for item in invalid_results)
                     )
                 continue
-            result = _dispatch_validated_call(
-                call,
-                validation["registry_arguments"],
-                tracer=tracer,
+            tracer.end_span(
+                span_id,
+                output={
+                    "decision": "call_tool",
+                    "reason": _decision_reason(decision_phase, call.name),
+                    "available_tools": available_tools,
+                    "selected_tool": call.name,
+                    "arguments": _jsonable(validation["registry_arguments"]),
+                },
             )
-            _apply_tool_result(state, call, result, validation["registry_arguments"])
-            result_summary = {
-                **validation,
-                "tool_result": _tool_result_summary(result),
-            }
+            if call.name == "fit_analysis":
+                batch = _dispatch_fit_analysis_batch(
+                    call,
+                    state,
+                    tracer=tracer,
+                )
+                for batch_call, arguments, result in batch:
+                    _apply_tool_result(state, batch_call, result, arguments)
+                _publish_progress(progress_callback, state)
+                result_summary = {
+                    **validation,
+                    "job_ids": [
+                        _argument_job_id(arguments)
+                        for _batch_call, arguments, _result in batch
+                    ],
+                    "tool_results": [
+                        _tool_result_summary(result)
+                        for _batch_call, _arguments, result in batch
+                    ],
+                }
+            else:
+                result = _dispatch_validated_call(
+                    call,
+                    validation["registry_arguments"],
+                    tracer=tracer,
+                )
+                _apply_tool_result(
+                    state, call, result, validation["registry_arguments"]
+                )
+                _publish_progress(progress_callback, state)
+                result_summary = {
+                    **validation,
+                    "tool_result": _tool_result_summary(result),
+                }
             decision = _decision_record(
                 call,
                 state,
@@ -505,16 +712,6 @@ def _run_agent_loop(
                 phase=decision_phase,
             )
             state.setdefault("agent_decisions", []).append(decision)
-            tracer.end_span(
-                span_id,
-                output={
-                    "selected_tool": call.name,
-                    "arguments": _jsonable(validation["registry_arguments"]),
-                    "selector_arguments": call.arguments,
-                    "decision_rationale": call.rationale,
-                    "result": result_summary,
-                },
-            )
             invalid_results = []
         except Exception as exc:
             tracer.end_span(
@@ -522,10 +719,14 @@ def _run_agent_loop(
                 status="ERROR",
                 error_type=exc.__class__.__name__,
                 output={
+                    "decision": "tool_selection_failed",
+                    "reason": _decision_reason(
+                        decision_phase, call.name if call else None
+                    ),
+                    "available_tools": available_tools,
                     "selected_tool": call.name if call else None,
                     "arguments": call.arguments if call else {},
-                    "decision_rationale": call.rationale if call else "",
-                    "result": {
+                    "validation": {
                         "valid": False,
                         "message": str(exc),
                         "error_type": exc.__class__.__name__,
@@ -539,22 +740,77 @@ def _run_agent_loop(
     )
 
 
+def _publish_progress(
+    callback: Callable[[AgentState], None] | None,
+    state: AgentState,
+) -> None:
+    """Publish a best-effort state snapshot without affecting the workflow."""
+
+    if callback is None:
+        return
+    try:
+        callback(state)
+    except Exception:
+        logger.exception("Progress callback failed; workflow execution continues.")
+
+
+def _decision_span_name(phase: str | None) -> str:
+    return {
+        Phase.FILTER.value: "Decision: Filtering",
+        Phase.SCORE.value: "Decision: Scoring",
+        Phase.FIT_ANALYSIS.value: "Decision: Fit Analysis",
+        Phase.TAILOR.value: "Decision: Resume Tailoring",
+        Phase.REVISION.value: "Decision: Resume Tailoring",
+        Phase.COVER_LETTERS.value: "Decision: Cover Letter",
+    }.get(str(phase), "Decision: Workflow")
+
+
+def _workflow_stage_label(phase: str | None) -> str:
+    return {
+        Phase.FILTER.value: "Filtering",
+        Phase.SCORE.value: "Scoring",
+        Phase.FIT_ANALYSIS.value: "Fit Analysis",
+        Phase.TAILOR.value: "Resume Tailoring",
+        Phase.REVISION.value: "Resume Tailoring",
+        Phase.COVER_LETTERS.value: "Cover Letter",
+    }.get(str(phase), "Workflow")
+
+
+def _tool_span_name(tool_name: str) -> str:
+    return {
+        "filtering": "Filtering Tool",
+        "scoring": "Scoring Tool",
+        "fit_analysis": "Fit Analysis Tool",
+        "resume_tailoring": "Resume Tailoring Tool",
+        "cover_letter": "Cover Letter Tool",
+    }.get(tool_name, f"{tool_name.replace('_', ' ').title()} Tool")
+
+
+def _decision_reason(phase: str | None, tool_name: str | None) -> str:
+    stage = _workflow_stage_label(phase)
+    selected = _tool_span_name(tool_name) if tool_name else "the next assignment tool"
+    return (
+        f"The workflow is currently in the {str(phase or 'WORKFLOW')} phase. "
+        f"I need to call {selected} to complete the {stage} stage."
+    )
+
+
 def _dispatch_validated_call(
     call: ModelToolCall,
     arguments: BaseModel,
     *,
     tracer: TraceManager,
 ) -> BaseModel:
+    tool_name = _tool_span_name(call.name)
+    serialized_arguments = arguments.model_dump(mode="json")
     span_id = tracer.start_span(
-        "orchestration.dispatch_validated_call",
-        {
+        tool_name,
+        metadata={
             "selected_tool": call.name,
             "job_id": _argument_job_id(arguments),
+            "argument_type": type(arguments).__name__,
         },
-        input={
-            "tool_name": call.name,
-            "argument_keys": sorted(arguments.model_dump()),
-        },
+        input=serialized_arguments,
     )
     try:
         result = invoke_tool(call.name, arguments, context={"tracer": tracer})
@@ -566,8 +822,168 @@ def _dispatch_validated_call(
             output={"error": str(exc)},
         )
         raise
-    tracer.end_span(span_id, output={"output_type": type(result).__name__})
+    tracer.end_span(
+        span_id,
+        metadata={
+            "output_type": type(result).__name__,
+            "status": getattr(result, "status", "OK"),
+        },
+        output=_assignment_tool_output(call.name, result),
+    )
     return result
+
+
+def _assignment_tool_output(tool_name: str, result: BaseModel) -> dict[str, Any]:
+    """Present one result in assignment language while retaining the full contract."""
+
+    payload = result.model_dump(mode="json")
+    if tool_name == "filtering":
+        rejected = payload.get("rejected_jobs", [])
+        return {
+            **payload,
+            "remaining_jobs": payload.get("accepted_jobs", []),
+            "rejection_reasons": [
+                {
+                    "job_id": item.get("job", {}).get("job_id"),
+                    "reasons": item.get("reasons", []),
+                }
+                for item in rejected
+            ],
+        }
+    if tool_name == "scoring":
+        top_ids = set(payload.get("top_3_job_ids", []))
+        return {
+            **payload,
+            "top_3": [
+                item
+                for item in payload.get("ranked_jobs", [])
+                if item.get("job", {}).get("job_id") in top_ids
+            ],
+        }
+    if tool_name in {"resume_tailoring", "cover_letter"}:
+        source_path = payload.get("output_tex_path")
+        generated_text: str | None = None
+        if source_path:
+            try:
+                generated_text = Path(source_path).read_text(encoding="utf-8")
+            except OSError:
+                generated_text = None
+        content_key = (
+            "tailored_resume" if tool_name == "resume_tailoring" else "cover_letter"
+        )
+        return {
+            **payload,
+            content_key: generated_text,
+            "pdf_path": payload.get("output_pdf_path"),
+            "page_validation": {
+                "page_count": payload.get("page_count"),
+                "exactly_one_page": payload.get("page_count") == 1,
+                "errors": [
+                    *payload.get("validation_failures", []),
+                    *payload.get("errors", []),
+                ],
+            },
+        }
+    return payload
+
+
+def _dispatch_fit_analysis_batch(
+    selected_call: ModelToolCall,
+    state: AgentState,
+    *,
+    tracer: TraceManager,
+) -> list[tuple[ModelToolCall, BaseModel, BaseModel]]:
+    """Run all remaining Top-3 fit analyses concurrently, capped at three."""
+
+    completed = set(state.get("fit_analyses", {}))
+    remaining_job_ids = [
+        job_id for job_id in state.get("top_3_job_ids", []) if job_id not in completed
+    ]
+    selected_job_id = _selected_job_id(selected_call)
+    if selected_job_id not in remaining_job_ids:
+        raise ToolExecutionError(
+            f"fit_analysis is not pending for selected job {selected_job_id!r}."
+        )
+
+    calls_and_arguments: list[tuple[ModelToolCall, BaseModel]] = []
+    for job_id in remaining_job_ids:
+        call = (
+            selected_call
+            if job_id == selected_job_id
+            else ModelToolCall(
+                name="fit_analysis",
+                arguments={"job_id": job_id},
+                rationale="Run the remaining Top-3 fit analyses in the same batch.",
+            )
+        )
+        validation = _validate_and_prepare_call(call, state)
+        if not validation["valid"]:
+            raise ToolExecutionError(str(validation["message"]))
+        calls_and_arguments.append((call, validation["registry_arguments"]))
+
+    span_id = tracer.start_span(
+        "Fit Analysis Tool",
+        metadata={
+            "selected_tool": "fit_analysis",
+            "job_count": len(calls_and_arguments),
+        },
+        input={
+            "top_3_jobs": [
+                arguments.model_dump(mode="json")
+                for _call, arguments in calls_and_arguments
+            ]
+        },
+    )
+    try:
+        with ThreadPoolExecutor(
+            max_workers=min(3, len(calls_and_arguments)),
+            thread_name_prefix="fit-analysis",
+        ) as executor:
+            futures = [
+                executor.submit(
+                    copy_context().run,
+                    invoke_tool,
+                    call.name,
+                    arguments,
+                    {"tracer": tracer},
+                )
+                for call, arguments in calls_and_arguments
+            ]
+            # Resolve in Top-3 order so state, history, and artifact ordering
+            # remain deterministic even though expensive work finishes out of
+            # order.
+            results = [
+                (call, arguments, future.result())
+                for (call, arguments), future in zip(
+                    calls_and_arguments,
+                    futures,
+                    strict=True,
+                )
+            ]
+    except Exception as exc:
+        tracer.end_span(
+            span_id,
+            status="ERROR",
+            error_type=exc.__class__.__name__,
+            output={"error": str(exc)},
+        )
+        raise
+    tracer.end_span(
+        span_id,
+        metadata={"output_count": len(results)},
+        output={
+            "fit_analyses": [
+                result.model_dump(mode="json") for _call, _arguments, result in results
+            ],
+            "project_swap_suggestions": [
+                result.project_swap.model_dump(mode="json")
+                if result.project_swap
+                else None
+                for _call, _arguments, result in results
+            ],
+        },
+    )
+    return results
 
 
 def _validate_and_prepare_call(
@@ -636,7 +1052,9 @@ def _registry_arguments_for_call(
     if tool_name == "fit_analysis":
         job_id = _selected_job_id(call)
         if not top_job_ids:
-            raise ToolExecutionError("fit_analysis requires top_3_job_ids from scoring.")
+            raise ToolExecutionError(
+                "fit_analysis requires top_3_job_ids from scoring."
+            )
         if state.get("tailoring_results"):
             raise ToolExecutionError(
                 "fit_analysis cannot run after resume tailoring has started."
@@ -714,11 +1132,12 @@ def _registry_arguments_for_call(
         attempts = _revision_attempts(state, job_id)
         latest = state.get("tailoring_results", {}).get(job_id, {})
         if latest.get("revision_feedback_satisfied") is True:
-            raise ToolExecutionError(f"Revision feedback is already satisfied for {job_id}.")
+            raise ToolExecutionError(
+                f"Revision feedback is already satisfied for {job_id}."
+            )
         if attempts >= MAX_REVISION_ROUNDS:
             raise ToolExecutionError(
-                f"Maximum revision rounds exceeded for {job_id}: "
-                f"{MAX_REVISION_ROUNDS}."
+                f"Maximum revision rounds exceeded for {job_id}: {MAX_REVISION_ROUNDS}."
             )
         feedback_text = _combined_review_and_memory_feedback(state, job_id)
         return TailorResumeInput(
@@ -794,7 +1213,9 @@ def _apply_tool_result(
             output,
             Job.model_validate(getattr(arguments, "job")),
             run_id=state_value(state, "run_id"),
-            source_labels=build_source_labels(AnalyzeFitInput.model_validate(arguments)),
+            source_labels=build_source_labels(
+                AnalyzeFitInput.model_validate(arguments)
+            ),
         )
         state.setdefault("fit_analysis_artifacts", {})[output.job_id] = {
             "markdown_path": str(markdown_path),
@@ -817,7 +1238,9 @@ def _apply_tool_result(
     if call.name == "cover_letter":
         output = GenerateCoverLetterOutput.model_validate(result)
         validate_artifact_output(tool.callable_name, output)
-        state.setdefault("cover_letter_results", {})[output.job_id] = output.model_dump()
+        state.setdefault("cover_letter_results", {})[output.job_id] = (
+            output.model_dump()
+        )
         if _all_top_jobs_have(state, "cover_letter_results"):
             state["phase"] = Phase.COMPLETE.value
             state["status"] = RunStatus.COMPLETED.value
@@ -829,7 +1252,9 @@ def _record_revision_result(state: AgentState, output: TailorResumeOutput) -> No
     revision_round = int(attempts_by_job.get(job_id, 0)) + 1
     attempts_by_job[job_id] = revision_round
     state["revision_attempts_by_job"] = attempts_by_job
-    feedback_text = str(state.get("review_decisions", {}).get(job_id, {}).get("comment", ""))
+    feedback_text = str(
+        state.get("review_decisions", {}).get(job_id, {}).get("comment", "")
+    )
     round_logs = state.setdefault("revision_round_logs", {})
     round_log = round_logs.setdefault(
         revision_round,
@@ -1116,17 +1541,13 @@ def _tool_result_summary(result: BaseModel) -> dict[str, Any]:
     if "ranked_jobs" in payload:
         summary["ranked_job_count"] = len(payload["ranked_jobs"])
     if "revision_feedback_satisfied" in payload:
-        summary["revision_feedback_satisfied"] = payload[
-            "revision_feedback_satisfied"
-        ]
+        summary["revision_feedback_satisfied"] = payload["revision_feedback_satisfied"]
     return summary
 
 
 def _decision_result_summary(result: Mapping[str, Any]) -> dict[str, Any]:
     summary = {
-        key: value
-        for key, value in dict(result).items()
-        if key != "registry_arguments"
+        key: value for key, value in dict(result).items() if key != "registry_arguments"
     }
     arguments = result.get("registry_arguments")
     if isinstance(arguments, BaseModel):
@@ -1182,6 +1603,7 @@ def _memory_evidence(state: AgentState) -> list[EvidenceItem]:
         EvidenceItem.model_validate(memory_fact_to_evidence(fact))
         for raw in state.get("memory_facts", [])
         if (fact := MemoryFact.model_validate(raw)).active
+        and fact.fact_type != "resume_feedback"
     ]
 
 
@@ -1192,8 +1614,15 @@ def _store_review_memory(
     tracer: TraceManager,
 ) -> tuple[list[dict[str, Any]], list[str], list[str]]:
     span_id = tracer.start_span(
-        "memory.write",
-        input={"reviewed_job_ids": sorted(decisions)},
+        "Memory Update Tool",
+        metadata={"memory_file": state_value(state, "memory_file")},
+        input={
+            "review_comments": {
+                job_id: decision.get("comment", "")
+                for job_id, decision in decisions.items()
+            },
+            "reviewed_job_ids": sorted(decisions),
+        },
     )
     comments = {
         job_id: decision["comment"]
@@ -1201,7 +1630,8 @@ def _store_review_memory(
         if decision["comment"].strip()
     }
     try:
-        extracted = extract_memory_facts(comments, review_round=1)
+        review_round = int(state.get("interrupt_payload", {}).get("review_round", 1))
+        extracted = extract_memory_facts(comments, review_round=review_round)
         valid, failures = validate_memory_facts(extracted, comments)
         store = JSONMemoryStore(state_value(state, "memory_file"))
         before = store.load()
@@ -1219,23 +1649,6 @@ def _store_review_memory(
                 for conflict in fact.conflicts
             }.values()
         )
-        conflict_span = tracer.start_span(
-            "memory.conflict_handling",
-            input={
-                "candidate_fact_count": len(valid),
-                "existing_fact_count": len(before),
-            },
-        )
-        tracer.end_span(
-            conflict_span,
-            output={
-                "conflict_count": len(conflict_events),
-                "conflicts": conflict_events,
-                "active_values": [
-                    fact.canonical_value for fact in updated if fact.active
-                ],
-            },
-        )
     except Exception as exc:
         tracer.end_span(
             span_id,
@@ -1250,6 +1663,11 @@ def _store_review_memory(
             "comments_with_content": len(comments),
             "valid_fact_count": len(valid),
             "new_fact_ids": new_ids,
+            "new_memory_fact": [
+                fact.model_dump()
+                for fact in updated
+                if fact.active and fact.fact_id in set(new_ids)
+            ],
             "memory_facts_written": [
                 fact.model_dump()
                 for fact in updated
@@ -1257,7 +1675,9 @@ def _store_review_memory(
             ],
             "validation_failures": failures,
             "conflict_count": len(conflict_events),
+            "conflicts": conflict_events,
             "active_values": [fact.canonical_value for fact in updated if fact.active],
+            "memory_file_updated": state_value(state, "memory_file"),
         },
     )
     return [fact.model_dump() for fact in updated], new_ids, failures
@@ -1271,13 +1691,6 @@ def _plan_memory_propagation(
     *,
     tracer: TraceManager,
 ) -> list[dict[str, Any]]:
-    span_id = tracer.start_span(
-        "memory.propagation_plan",
-        input={
-            "top_3_job_ids": list(state.get("top_3_job_ids", [])),
-            "new_memory_fact_ids": new_fact_ids,
-        },
-    )
     try:
         facts = [
             MemoryFact.model_validate(raw)
@@ -1317,25 +1730,8 @@ def _plan_memory_propagation(
                     "reason": _memory_propagation_reason(status),
                 }
             )
-        tracer.end_span(
-            span_id,
-            output={
-                "actions": actions,
-                "pending_job_ids": [
-                    action["job_id"]
-                    for action in actions
-                    if action["status"] == "pending_tailoring"
-                ],
-            },
-        )
         return actions
-    except Exception as exc:
-        tracer.end_span(
-            span_id,
-            status="ERROR",
-            error_type=exc.__class__.__name__,
-            output={"error": str(exc)},
-        )
+    except Exception:
         raise
 
 
@@ -1358,10 +1754,7 @@ def _relevant_memory_facts_for_job(
 def _memory_feedback(facts: list[MemoryFact]) -> str:
     if not facts:
         return ""
-    parts = [
-        f"{fact.canonical_value} ({fact.fact_id})"
-        for fact in facts
-    ]
+    parts = [f"{fact.canonical_value} ({fact.fact_id})" for fact in facts]
     return "Apply newly learned, reviewer-stated fact(s): " + "; ".join(parts) + "."
 
 
@@ -1427,25 +1820,6 @@ def _final_artifact_paths(
             ),
         }
     return paths
-
-
-def _write_trace_events_snapshot(
-    manifest: dict[str, Any], tracer: TraceManager
-) -> None:
-    output_root = manifest.get("output_root")
-    if not output_root:
-        return
-    Path(output_root, "trace_events.json").write_text(
-        json.dumps(
-            sanitize_public_artifact_references(
-                [event.__dict__ for event in tracer.events]
-            ),
-            indent=2,
-            ensure_ascii=False,
-            default=str,
-        ),
-        encoding="utf-8",
-    )
 
 
 def _revision_attempt_log(
