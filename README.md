@@ -1,19 +1,96 @@
 # Job Search Agent
 
-A Streamlit app and agent workflow for a repeatable job-search run. It filters
-jobs, ranks the best matches, writes fit analyses, tailors resumes, pauses for
-human review, and generates cover letters.
+An agentic job-search workflow that filters and ranks jobs, analyzes candidate
+fit, tailors a resume, pauses for human review, and generates a complete
+application package. The interface is built with Streamlit and the workflow is
+orchestrated with LangGraph.
 
-All candidate details in this repo are fictional.
+> All candidate and job details in this repository are fictional.
 
-## What You Need
+## Architecture
+
+![Job Search Agent architecture](architecture.png)
+
+The agent loads the jobs dataset, candidate preferences, master resume,
+portfolio, and persistent memory. It then invokes five registered tools in the
+workflow below. Fit analysis and resume tailoring run for each of the Top 3
+jobs, followed by one combined human-review gate. Approved or revised resumes
+are then used to generate the final cover letters and application artifacts.
+
+```mermaid
+flowchart LR
+    A[Input files<br/>jobs, preferences, resume, portfolio] --> B[Initialize agent<br/>load memory]
+    B --> C[Filter jobs]
+    C --> D[Score and rank jobs]
+    D --> E[Select Top 3]
+    E --> F[Fit analysis<br/>per job]
+    F --> G[Resume tailoring<br/>per job]
+    G --> H{Human review}
+    H -->|Revise| G
+    H -->|Approve| I[Cover-letter generation<br/>per job]
+    I --> J[Validate and write artifacts]
+    J --> K[Update memory]
+    J --> L[Langfuse trace]
+```
+
+Main components:
+
+- `src/agent/`: LangGraph state, controller, tool selection, and workflow graph
+- `src/tools/`: filtering, scoring, fit analysis, resume tailoring, and
+  cover-letter tools
+- `src/review/`: human-review and persistent-memory logic
+- `src/tracing/`: Langfuse observability
+- `app/`: Streamlit UI and artifact-loading services
+- `tests/`: unit, integration, and preflight tests
+
+## Repository Deliverables
+
+This repository includes the artifacts required by section 5.3:
+
+| Requirement | Location |
+| --- | --- |
+| Agent code (Python) | `src/` and `app/` |
+| README, architecture, setup, and run instructions | `README.md` and `architecture.png` |
+| Jobs CSV | `data/jobs.csv` |
+| Candidate resume source | `data/resume.tex` |
+| Compiled candidate resume | `outputs/ui-live-20260727-023453-679457/<job-id>/resume_before.pdf` |
+| Project portfolio | `data/portfolio.txt` |
+| Memory written by the agent | `outputs/memory.json` and the run-specific `memory.json` |
+| Application packages for at least 3 jobs | `outputs/ui-live-20260727-023453-679457/J017/`, `J023/`, and `J028/` |
+
+`resume_before.pdf` is the compiled, unchanged candidate resume generated from
+`data/resume.tex` and preserved inside each job package for before/after
+comparison.
+
+The submitted run contains one folder per selected job:
+
+```text
+outputs/ui-live-20260727-023453-679457/
+├── J017/
+│   ├── job_details.json
+│   ├── resume_before.pdf
+│   ├── resume_after.pdf
+│   ├── cover_letter.pdf
+│   ├── fit_analysis.md
+│   └── fit_analysis.json
+├── J023/
+│   └── ...same required artifacts...
+└── J028/
+    └── ...same required artifacts...
+```
+
+Each job folder also contains the human-review decision, revision history, and
+change log. The run root contains ranked and rejected jobs, its manifest,
+memory, trace events, and the public trace URL.
+
+## Requirements
 
 - Python 3.12
 - `pdflatex`
-- DeepInfra credentials
+- DeepInfra API credentials
 - Langfuse credentials for live tracing
 
-On macOS, install LaTeX with:
+On macOS, install a LaTeX distribution with:
 
 ```bash
 brew install --cask basictex
@@ -23,8 +100,9 @@ pdflatex --version
 
 ## Setup
 
+From the repository root:
+
 ```bash
-deactivate 2>/dev/null || true
 conda create -n job-search-agent python=3.12 -y
 conda activate job-search-agent
 python -m pip install --upgrade pip
@@ -32,7 +110,7 @@ python -m pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Fill in `.env`:
+Add credentials and runtime configuration to `.env`:
 
 ```env
 LLM_MODEL=your-provider/your-model
@@ -46,43 +124,46 @@ LANGFUSE_HOST=https://us.cloud.langfuse.com
 OUTPUT_DIR=outputs
 ```
 
-Check that the environment is ready:
+Verify Python dependencies, credentials, input files, LaTeX packages, and
+output permissions:
 
 ```bash
 python tests/preflight.py
 ```
 
-## Run The Production Workflow
+## Run
 
-Use this for a full live run with model tool selection and Langfuse tracing:
+Start the Streamlit application from the repository root:
 
 ```bash
 conda activate job-search-agent
-python main.py
-```
-
-The runner creates a run ID automatically, such as
-`job-search-live-20260726-184512`. It is used in the output folder
-(`outputs/<run-id>/`), checkpoints, and tracing metadata.
-
-The command fails fast if required live credentials or `pdflatex` are missing.
-
-## Run The Web App
-
-Start the Streamlit interface from the repository root:
-
-```bash
 streamlit run app/streamlit_app.py
 ```
 
-The app provides file uploads, concise live status, one combined Top 3 resume
-review gate, application-package downloads, and expandable run evidence. It uses the same
-workflow, environment variables, artifacts, and `pdflatex` dependency as the
-production runner.
+Then open the local URL printed by Streamlit. Upload or review the four input
+files, start a run, and submit the combined Top 3 human review when prompted.
+The app writes the completed run to `outputs/<run-id>/`.
+
+To inspect the included submission without calling the model, use **Open run**
+in the app and select:
+
+```text
+ui-live-20260727-023453-679457
+```
 
 ## Input Files
 
-`jobs.csv` must include these columns:
+The default inputs are:
+
+```text
+data/
+├── jobs.csv
+├── preferences.yaml
+├── resume.tex
+└── portfolio.txt
+```
+
+`jobs.csv` must include:
 
 ```text
 job_id,title,company,industry_domain,location,remote,description,
@@ -90,44 +171,29 @@ required_skills,years_experience_required,company_details,url,
 salary_min,salary_max
 ```
 
-`preferences.yaml` should include:
+`resume.tex` is the candidate's master LaTeX resume. `portfolio.txt` provides
+project and skill evidence that the agent may cite. `preferences.yaml` contains
+target roles, locations, salary constraints, exclusions, and master skills.
 
-```yaml
-candidate:
-  years_of_experience: 4
+## Output Contract
 
-preferences:
-  target_job_titles:
-    - Machine Learning Engineer
-  preferred_locations:
-    - Remote, US
-  remote_only: false
-  excluded_companies: []
-  job_types:
-    - full-time
-  min_salary: 100000
-  excluded_keywords: []
+Every selected job is written to `outputs/<run-id>/<job-id>/` with at least:
 
-master_skills:
-  - Python
-  - PyTorch
+```text
+job_details.json       # selected job details
+resume_before.pdf      # compiled master resume before tailoring
+resume_after.pdf       # tailored and compiled resume
+cover_letter.pdf       # generated and compiled cover letter
+fit_analysis.md        # human-readable fit analysis
+fit_analysis.json      # structured fit analysis
 ```
 
-`resume.tex` must be a LaTeX resume. `portfolio.txt` is plain text describing
-projects, skills, and evidence the agent can cite.
-
-## Outputs
-
-Runs write files to `outputs/<run-id>/`, including:
-
-- `run_manifest.json`
-- `trace_events.json`
-- `ranked_jobs.json`
-- `rejected_jobs.json`
-- one folder per selected job with fit analysis, tailored resume, cover letter,
-  review decision, and revision history
+The agent also persists learned review facts to `outputs/memory.json`, allowing
+future runs to reuse accepted candidate evidence and preferences.
 
 ## Tests
+
+Run the full test suite:
 
 ```bash
 pytest -q
