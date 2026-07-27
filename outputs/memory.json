@@ -1,0 +1,17 @@
+[
+  {
+    "fact_id": "mem-70e5ff925d28",
+    "fact_type": "resume_feedback",
+    "canonical_value": "No-Code LLM Chatbot Builder should be the first project! It has more agentic skill",
+    "provenance": {
+      "source": "human_review",
+      "review_round": 1,
+      "original_statement": "No-Code LLM Chatbot Builder should be the first project! It has more agentic skill",
+      "related_job_id": "J017",
+      "metadata": {}
+    },
+    "created_at": "2026-07-27T02:37:28.579545+00:00",
+    "active": true,
+    "conflicts": []
+  }
+]

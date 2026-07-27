@@ -1,0 +1,38 @@
+{
+  "job_id": "J017",
+  "title": "Agentic AI Developer",
+  "company": "ManTech",
+  "industry_domain": "Federal Technology / Agentic AI",
+  "location": "United States",
+  "remote": null,
+  "description": "• Develop agentic-AI applications for federal or mission customers.\n• Integrate LLMs with tools, APIs and enterprise data.\n• Implement retrieval and knowledge-grounding workflows.\n• Build secure, maintainable application services.\n• Evaluate outputs, latency and operational reliability.\n• Work with cloud and data-engineering teams.\n• Document architectures, prompts and evaluation results.\n• Support demonstrations and production deployment.\n• Hold a relevant technical degree or equivalent experience.\n• Bring at least two years of relevant professional experience.",
+  "required_skills": [
+    "Python",
+    "LLMs",
+    "agents",
+    "RAG",
+    "APIs",
+    "vector databases",
+    "cloud deployment"
+  ],
+  "years_experience_required": 2,
+  "experience_requirement": {
+    "minimum_years": 2.0,
+    "maximum_years": null,
+    "raw_text": "2+ years"
+  },
+  "company_details": "U.S. technology contractor serving defense, intelligence and federal customers.\nIts engineers build secure data, cyber, cloud and AI capabilities.",
+  "url": "https://careers.mantech.com/en_US/careers/JobDetail/Agentic-AI-Developer/64069",
+  "requirements": [
+    "Python",
+    "LLMs",
+    "agents",
+    "RAG",
+    "APIs",
+    "vector databases",
+    "cloud deployment"
+  ],
+  "salary_min": null,
+  "salary_max": null,
+  "source": "https://careers.mantech.com/en_US/careers/JobDetail/Agentic-AI-Developer/64069"
+}

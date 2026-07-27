@@ -1,0 +1,37 @@
+{
+  "run_id": "ui-live-20260727-023453-679457",
+  "output_root": "outputs/ui-live-20260727-023453-679457",
+  "job_ids": [
+    "J017",
+    "J028",
+    "J023"
+  ],
+  "job_directories": [
+    "outputs/ui-live-20260727-023453-679457/J017",
+    "outputs/ui-live-20260727-023453-679457/J028",
+    "outputs/ui-live-20260727-023453-679457/J023"
+  ],
+  "mandatory_files_per_job": [
+    "job_details.json",
+    "resume_before.pdf",
+    "resume_after.pdf",
+    "cover_letter.pdf",
+    "fit_analysis.json",
+    "fit_analysis.md",
+    "change_log.json",
+    "human_review_decision.json",
+    "revision_history.json"
+  ],
+  "resume_count": 3,
+  "cover_letter_count": 3,
+  "pdf_count": 9,
+  "trace_id": "03ee546b0d51c4d8ed0bd1dcb9a596f6",
+  "trace_url": "https://us.cloud.langfuse.com/project/cms1ljqbl1mggad0d08ajfhbq/traces/03ee546b0d51c4d8ed0bd1dcb9a596f6",
+  "trace_public": true,
+  "trace_ingest_confirmed": true,
+  "observation_count": 28,
+  "trace_export_error": null,
+  "trace_debug_status": "v4 ingestion confirmed (28 observations)",
+  "langfuse_host": "https://us.cloud.langfuse.com",
+  "langfuse_sdk_version": "4.14.1"
+}

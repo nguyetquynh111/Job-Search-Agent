@@ -1,0 +1,162 @@
+{
+  "job_id": "J017",
+  "relevant_experience": [
+    {
+      "claim": "AI CRM and No-Code LLM Chatbot Builder experience: centered on delivering RAG-based services and predictive analytics using FastAPI and AWS SageMaker — strong alignment with the job's focus on LLM integration and cloud deployment.",
+      "evidence_ids": [
+        "job-J017-description",
+        "resume-experience-002",
+        "portfolio-P02",
+        "portfolio-P03"
+      ],
+      "confidence": 0.9,
+      "notes": "verdict=match; direct experience with the core tech stack requested."
+    },
+    {
+      "claim": "AI Recruitment Platform experience: centered on production NLP, ranking, and information extraction — partial alignment with the job's focus on data-driven application services.",
+      "evidence_ids": [
+        "job-J017-description",
+        "portfolio-P08"
+      ],
+      "confidence": 0.9,
+      "notes": "verdict=partial; shows production-level NLP and API skills but less focus on agentic workflows."
+    },
+    {
+      "claim": "Cardiovascular Flow and Stenosis Analysis experience: centered on medical computer vision and segmentation — mismatch with the job's focus on agentic AI and LLM orchestration.",
+      "evidence_ids": [
+        "job-J017-description",
+        "portfolio-P05"
+      ],
+      "confidence": 0.9,
+      "notes": "verdict=mismatch; domain is highly specialized in vision rather than LLM agents."
+    }
+  ],
+  "seniority": [
+    {
+      "claim": "Seniority: ~4 years of experience vs job (2+ years expected).",
+      "evidence_ids": [
+        "job-J017-experience",
+        "resume-experience-001",
+        "resume-experience-002"
+      ],
+      "confidence": 0.9,
+      "notes": "verdict=match; Meets or exceeds the stated experience."
+    }
+  ],
+  "education": [
+    {
+      "claim": "Ph.D. Student in Electrical and Computer Engineering: meets the requirement for a relevant technical degree.",
+      "evidence_ids": [
+        "job-J017-description",
+        "resume-education-001"
+      ],
+      "confidence": 0.9,
+      "notes": "verdict=match; advanced technical education in progress."
+    }
+  ],
+  "aligned_skills": [
+    {
+      "claim": "Python: present in resume and master skills.",
+      "evidence_ids": [
+        "job-J017-skill-001",
+        "resume-skills-001"
+      ],
+      "confidence": 0.8,
+      "notes": "verdict=match; core language requirement."
+    },
+    {
+      "claim": "vector databases: present in resume (Pinecone, etc).",
+      "evidence_ids": [
+        "job-J017-skill-006",
+        "resume-skills-001"
+      ],
+      "confidence": 0.8,
+      "notes": "verdict=match; candidate lists specific vector DBs like Pinecone."
+    }
+  ],
+  "evidenced_missing_skills": [
+    {
+      "claim": "agents: evidenced via AutoGen in portfolio.",
+      "evidence_ids": [
+        "job-J017-skill-003",
+        "portfolio-P03"
+      ],
+      "confidence": 0.7,
+      "notes": "verdict=missing; candidate has used AutoGen for agentic workflows."
+    },
+    {
+      "claim": "LLMs: required by the job, not yet on your resume, but evidenced in portfolio.",
+      "evidence_ids": [
+        "job-J017-skill-002",
+        "portfolio-P03"
+      ],
+      "confidence": 0.7,
+      "notes": "verdict=missing; core requirement."
+    },
+    {
+      "claim": "RAG: required by the job, not yet on your resume, but evidenced in portfolio.",
+      "evidence_ids": [
+        "job-J017-skill-004",
+        "portfolio-P03"
+      ],
+      "confidence": 0.7,
+      "notes": "verdict=missing; core requirement."
+    },
+    {
+      "claim": "APIs: required by the job, not yet on your resume, but evidenced in portfolio.",
+      "evidence_ids": [
+        "job-J017-skill-005",
+        "portfolio-P03"
+      ],
+      "confidence": 0.7,
+      "notes": "verdict=missing; core requirement."
+    },
+    {
+      "claim": "cloud deployment: required by the job, not yet on your resume, but evidenced in portfolio.",
+      "evidence_ids": [
+        "job-J017-skill-007",
+        "portfolio-P02"
+      ],
+      "confidence": 0.7,
+      "notes": "verdict=missing; experience with AWS SageMaker and Kubernetes."
+    }
+  ],
+  "genuine_gaps": [],
+  "project_analysis": [
+    {
+      "claim": "Current project 'Cardiovascular Flow and Stenosis Analysis' (P05) is the weakest match for this job (shared general tooling only); recommended for swap.",
+      "evidence_ids": [
+        "job-J017-description",
+        "portfolio-P05"
+      ],
+      "confidence": 0.7,
+      "notes": "verdict=mismatch"
+    },
+    {
+      "claim": "Current project 'No-Code LLM Chatbot Builder' (P03) aligns well with this job (tech: AutoGen, retrieval-augmented generation, FastAPI; industry: Customer Service Technology).",
+      "evidence_ids": [
+        "job-J017-description",
+        "portfolio-P03"
+      ],
+      "confidence": 0.8,
+      "notes": "verdict=match"
+    }
+  ],
+  "project_swap": {
+    "remove_project": "Cardiovascular Flow and Stenosis Analysis",
+    "add_project": "AI CRM Platform",
+    "rationale": "The AI CRM Platform project demonstrates stronger alignment with the job's requirements for predictive analytics, cloud deployment (AWS SageMaker), and NLP compared to the highly specialized medical vision project.",
+    "evidence_ids": [
+      "job-J017-description",
+      "portfolio-P02"
+    ]
+  },
+  "validation_failures": [
+    "moved 'LLMs' from aligned to evidenced_missing (no resume evidence)",
+    "moved 'RAG' from aligned to evidenced_missing (no resume evidence)",
+    "moved 'APIs' from aligned to evidenced_missing (no resume evidence)",
+    "moved 'cloud deployment' from aligned to evidenced_missing (no resume evidence)",
+    "rejected seniority claim with no semantically matching candidate evidence: '4 years of experience: meets the requirement of at least 2 years of relevant professional experience.'",
+    "filled seniority from deterministic evidence pass"
+  ]
+}

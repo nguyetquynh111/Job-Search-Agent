@@ -1,0 +1,38 @@
+{
+  "job_id": "J028",
+  "title": "Generative AI Engineer",
+  "company": "Booz Allen Hamilton",
+  "industry_domain": "Government Consulting / Generative AI",
+  "location": "Ashburn, VA",
+  "remote": null,
+  "description": "• Design and build generative-AI applications for client missions.\n• Develop LLM, NLP and deep-learning capabilities.\n• Build agentic workflows and tool integrations.\n• Create production software around models and data.\n• Evaluate quality, safety and operational performance.\n• Integrate AI services with enterprise applications.\n• Collaborate with engineers, data scientists and clients.\n• Document architectures, prompts and model behavior.\n• Bring at least one year of agentic-AI development.\n• Bring at least five years in software, ML engineering, data science or research.",
+  "required_skills": [
+    "Python",
+    "LLMs",
+    "NLP",
+    "deep learning",
+    "agentic AI",
+    "software engineering",
+    "model deployment"
+  ],
+  "years_experience_required": null,
+  "experience_requirement": {
+    "minimum_years": null,
+    "maximum_years": null,
+    "raw_text": "5+ years; plus 1+ year in agentic AI"
+  },
+  "company_details": "Technology and management consulting company serving government and commercial clients.\nIts AI and data teams build production analytics, software and mission systems.",
+  "url": "https://careers.boozallen.com/careers/JobDetail?jobId=126635",
+  "requirements": [
+    "Python",
+    "LLMs",
+    "NLP",
+    "deep learning",
+    "agentic AI",
+    "software engineering",
+    "model deployment"
+  ],
+  "salary_min": null,
+  "salary_max": null,
+  "source": "https://careers.boozallen.com/careers/JobDetail?jobId=126635"
+}

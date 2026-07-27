@@ -1,0 +1,166 @@
+{
+  "job_id": "J028",
+  "relevant_experience": [
+    {
+      "claim": "Experience building AI CRM and no-code LLM chatbot builder: centered on RAG, FastAPI, and cloud deployment — strong alignment with the job's focus on generative AI and model deployment.",
+      "evidence_ids": [
+        "job-J028-description",
+        "portfolio-P02",
+        "portfolio-P03"
+      ],
+      "confidence": 0.9,
+      "notes": "verdict=match; aligns well with generative AI and deployment requirements."
+    },
+    {
+      "claim": "Experience building recruitment and ranking services: centered on production NLP and information extraction — strong alignment with the job's NLP requirements.",
+      "evidence_ids": [
+        "job-J028-description",
+        "portfolio-P08"
+      ],
+      "confidence": 0.9,
+      "notes": "verdict=match; directly supports NLP and production ML needs."
+    },
+    {
+      "claim": "Experience in cardiovascular imaging and fall detection: centered on computer vision and embedded inference — partial alignment as the job focuses more on generative AI/LLMs than medical vision.",
+      "evidence_ids": [
+        "job-J028-description",
+        "portfolio-P04",
+        "portfolio-P05",
+        "portfolio-P07"
+      ],
+      "confidence": 0.9,
+      "notes": "verdict=partial; demonstrates strong ML engineering but in a different domain."
+    }
+  ],
+  "seniority": [
+    {
+      "claim": "Seniority: ~4 years of experience vs job (5+ years; plus 1+ year in agentic AI).",
+      "evidence_ids": [
+        "job-J028-experience",
+        "resume-experience-001",
+        "resume-experience-002"
+      ],
+      "confidence": 0.9,
+      "notes": "verdict=match; Job years not specified; not inferred."
+    }
+  ],
+  "education": [
+    {
+      "claim": "Ph.D. Student in Electrical and Computer Engineering at Gulfview Technical University.",
+      "evidence_ids": [
+        "job-J028-description",
+        "resume-education-001"
+      ],
+      "confidence": 0.9,
+      "notes": "verdict=match; advanced technical education aligns with research-heavy roles."
+    }
+  ],
+  "aligned_skills": [
+    {
+      "claim": "Python: Proficient in Python for ML and production workflows.",
+      "evidence_ids": [
+        "job-J028-skill-001",
+        "resume-skills-001"
+      ],
+      "confidence": 0.8,
+      "notes": "verdict=match; core requirement met."
+    }
+  ],
+  "evidenced_missing_skills": [
+    {
+      "claim": "agentic AI: Experience with AutoGen for building agentic workflows.",
+      "evidence_ids": [
+        "job-J028-skill-005",
+        "portfolio-P03"
+      ],
+      "confidence": 0.7,
+      "notes": "verdict=missing; skill is evidenced in portfolio but not explicitly on resume."
+    },
+    {
+      "claim": "LLMs: required by the job, not yet on your resume, but evidenced in portfolio.",
+      "evidence_ids": [
+        "job-J028-skill-002",
+        "portfolio-P03"
+      ],
+      "confidence": 0.7,
+      "notes": "verdict=missing; core requirement met."
+    },
+    {
+      "claim": "NLP: required by the job, not yet on your resume, but evidenced in portfolio.",
+      "evidence_ids": [
+        "job-J028-skill-003",
+        "portfolio-P08"
+      ],
+      "confidence": 0.7,
+      "notes": "verdict=missing; core requirement met."
+    },
+    {
+      "claim": "deep learning: required by the job, not yet on your resume, but evidenced in portfolio.",
+      "evidence_ids": [
+        "job-J028-skill-004",
+        "portfolio-P01",
+        "portfolio-P04"
+      ],
+      "confidence": 0.7,
+      "notes": "verdict=missing; core requirement met."
+    },
+    {
+      "claim": "model deployment: required by the job, not yet on your resume, but evidenced in portfolio.",
+      "evidence_ids": [
+        "job-J028-skill-007",
+        "portfolio-P02",
+        "portfolio-P03"
+      ],
+      "confidence": 0.7,
+      "notes": "verdict=missing; core requirement met."
+    }
+  ],
+  "genuine_gaps": [
+    {
+      "claim": "software engineering: No explicit evidence of formal software engineering principles or large-scale software development lifecycle experience.",
+      "evidence_ids": [
+        "job-J028-skill-006"
+      ],
+      "confidence": 0.75,
+      "notes": "verdict=mismatch; job requires production software creation."
+    }
+  ],
+  "project_analysis": [
+    {
+      "claim": "Current project 'Cardiovascular Flow and Stenosis Analysis' (P05) is the weakest match for this job (tech: PyTorch); recommended for swap.",
+      "evidence_ids": [
+        "job-J028-description",
+        "portfolio-P05"
+      ],
+      "confidence": 0.7,
+      "notes": "verdict=mismatch"
+    },
+    {
+      "claim": "Current project 'No-Code LLM Chatbot Builder' (P03) aligns well with this job (tech: AutoGen; domain: Generative AI).",
+      "evidence_ids": [
+        "job-J028-description",
+        "portfolio-P03"
+      ],
+      "confidence": 0.8,
+      "notes": "verdict=match"
+    }
+  ],
+  "project_swap": {
+    "remove_project": "Cardiovascular Flow and Stenosis Analysis",
+    "add_project": "AI CRM Platform",
+    "rationale": "The AI CRM Platform provides stronger evidence of applied ML, predictive analytics, and cloud deployment (FastAPI, Docker, Kubernetes, AWS) which aligns better with the 'production software' and 'integrating AI services' requirements of the job.",
+    "evidence_ids": [
+      "job-J028-description",
+      "portfolio-P02"
+    ]
+  },
+  "validation_failures": [
+    "moved 'LLMs' from aligned to evidenced_missing (no resume evidence)",
+    "rejected semantically unrelated evidence for 'NLP': ['portfolio-P03']",
+    "moved 'NLP' from aligned to evidenced_missing (no resume evidence)",
+    "moved 'deep learning' from aligned to evidenced_missing (no resume evidence)",
+    "moved 'model deployment' from aligned to evidenced_missing (no resume evidence)",
+    "rejected seniority claim with no semantically matching candidate evidence: 'Candidate has 4 years of experience, while the job requires 5+ years of experience.'",
+    "filled seniority from deterministic evidence pass"
+  ]
+}

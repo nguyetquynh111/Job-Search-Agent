@@ -1,0 +1,427 @@
+[
+  {
+    "job": {
+      "job_id": "J002",
+      "title": "AI Engineer Intern - GenAI Internal Automation - GAIA",
+      "company": "Equativ",
+      "industry_domain": "AdTech / Generative AI",
+      "location": "Paris, France (On-site)",
+      "remote": false,
+      "description": "• Join Equativ's GenAI team in Paris for an on-site internship.\n• Help design, develop and deploy internal generative-AI automation.\n• Build production-ready agent workflows for internal use cases.\n• Use Python and Git in the development workflow.\n• Work with Google ADK, LangChain or LangGraph.\n• Use Vertex AI and container or orchestration technology such as Kubernetes.\n• Contribute to n8n-based automation and agentic workflows.\n• Apply MLOps/AIOps, CI/CD and unit-testing practices.\n• Collaborate with a strategic GenAI unit responsible for Equativ's GenAI stack.\n• The accessible posting does not state a years-of-experience minimum.",
+      "required_skills": [
+        "Python",
+        "Git",
+        "Google ADK",
+        "LangChain/LangGraph",
+        "Vertex AI",
+        "Kubernetes",
+        "n8n",
+        "MLOps/AIOps",
+        "CI/CD",
+        "agent workflows"
+      ],
+      "years_experience_required": null,
+      "experience_requirement": {
+        "minimum_years": null,
+        "maximum_years": null,
+        "raw_text": "No years stated; internship/student eligibility"
+      },
+      "company_details": "Independent advertising-technology company operating programmatic advertising products.\nIts engineering and data teams work on privacy-first advertising, AI and large-scale prediction systems.",
+      "url": "https://jobs.lever.co/equativ/43f7b6c8-476b-4226-bbec-1e1b3dfb35b2",
+      "requirements": [
+        "Python",
+        "Git",
+        "Google ADK",
+        "LangChain/LangGraph",
+        "Vertex AI",
+        "Kubernetes",
+        "n8n",
+        "MLOps/AIOps",
+        "CI/CD",
+        "agent workflows"
+      ],
+      "salary_min": null,
+      "salary_max": null,
+      "source": "https://jobs.lever.co/equativ/43f7b6c8-476b-4226-bbec-1e1b3dfb35b2"
+    },
+    "reasons": [
+      "Location 'Paris, France (On-site)' is outside the preferred locations (Houston, TX, Remote, US, Washington, DC, Arlington, VA, Baltimore, MD, New York, NY, San Francisco, CA, Boston, MA)."
+    ]
+  },
+  {
+    "job": {
+      "job_id": "J003",
+      "title": "Principal Data Science",
+      "company": "Fidelity Investments",
+      "industry_domain": "Financial Services / Decision Science",
+      "location": "Jersey City, NJ",
+      "remote": null,
+      "description": "• Lead advanced data-science analysis for financial-services decisions.\n• Develop statistical and machine-learning solutions.\n• Translate complex questions into analytical plans.\n• Present findings and recommendations to business partners.\n• Establish analytical guidelines and technical standards.\n• Mentor junior data scientists and analysts.\n• Collaborate with product, technology and investment stakeholders.\n• Use quantitative methods and modern data-science tools.\n• Hold a relevant bachelor's or master's degree.\n• Bring ten years with a master's degree or twelve years with a bachelor's degree.",
+      "required_skills": [
+        "Statistics",
+        "machine learning",
+        "Python/R/SQL",
+        "financial analytics",
+        "stakeholder communication",
+        "mentoring"
+      ],
+      "years_experience_required": null,
+      "experience_requirement": {
+        "minimum_years": null,
+        "maximum_years": null,
+        "raw_text": "Master's + 10 years, or bachelor's + 12 years"
+      },
+      "company_details": "Financial-services company providing investment, retirement and brokerage products.\nIts data-science teams develop analytics, decision systems and customer solutions.",
+      "url": "https://jobs.fidelity.com/en/jobs/2132120/principal-data-science/",
+      "requirements": [
+        "Statistics",
+        "machine learning",
+        "Python/R/SQL",
+        "financial analytics",
+        "stakeholder communication",
+        "mentoring"
+      ],
+      "salary_min": null,
+      "salary_max": null,
+      "source": "https://jobs.fidelity.com/en/jobs/2132120/principal-data-science/"
+    },
+    "reasons": [
+      "Location 'Jersey City, NJ' is outside the preferred locations (Houston, TX, Remote, US, Washington, DC, Arlington, VA, Baltimore, MD, New York, NY, San Francisco, CA, Boston, MA)."
+    ]
+  },
+  {
+    "job": {
+      "job_id": "J004",
+      "title": "Summer Intern 2027 - Quantitative Trader",
+      "company": "Five Rings",
+      "industry_domain": "Quantitative Finance / Proprietary Trading",
+      "location": "New York, NY",
+      "remote": null,
+      "description": "• Complete a nine-week quantitative-trading internship.\n• Participate in structured training on markets, trading and risk.\n• Apply mathematical and logical reasoning to trading problems.\n• Work with mentors on real quantitative projects.\n• Analyze data and simulated or live market scenarios.\n• Collaborate with traders, researchers and other interns.\n• Communicate assumptions, decisions and results clearly.\n• Be enrolled in a quantitatively focused degree program.\n• Meet the graduation-window requirement stated in the posting.\n• Prior finance experience and professional work experience are not required.",
+      "required_skills": [
+        "Mathematics",
+        "probability",
+        "logical problem solving",
+        "quantitative reasoning",
+        "communication"
+      ],
+      "years_experience_required": null,
+      "experience_requirement": {
+        "minimum_years": null,
+        "maximum_years": null,
+        "raw_text": "No explicit years stated; student role with specified graduation eligibility"
+      },
+      "company_details": "New York proprietary trading firm focused on quantitative trading, research and technology.\nIts internships combine structured training, mentorship and project work.",
+      "url": "https://job-boards.greenhouse.io/fiveringsllc/jobs/5139668008",
+      "requirements": [
+        "Mathematics",
+        "probability",
+        "logical problem solving",
+        "quantitative reasoning",
+        "communication"
+      ],
+      "salary_min": null,
+      "salary_max": null,
+      "source": "https://job-boards.greenhouse.io/fiveringsllc/jobs/5139668008"
+    },
+    "reasons": [
+      "Title 'Summer Intern 2027 - Quantitative Trader' does not align with the candidate's target titles (AI Engineer, Machine Learning Engineer, Computer Vision Engineer, Generative AI Engineer, MLOps Engineer)."
+    ]
+  },
+  {
+    "job": {
+      "job_id": "J009",
+      "title": "Consultant (Top Secret Clearance, Software Implementation)",
+      "company": "Appian",
+      "industry_domain": "Enterprise Software / Generative AI Consulting",
+      "location": "McLean, VA; work in a cleared facility",
+      "remote": null,
+      "description": "• Work with clients to define business processes and gather functional and technical requirements.\n• Design and build applications on the Appian platform.\n• Create relational data models, interfaces and system integrations.\n• Apply object-oriented programming concepts and SQL.\n• Develop and test APIs and workflow components.\n• Participate in Agile delivery, demonstrations and design reviews.\n• Troubleshoot technical issues and improve application quality.\n• Communicate clearly with client and engineering stakeholders.\n• Maintain an active Top Secret clearance or higher.\n• Bring at least one year of software development or technical consulting experience.",
+      "required_skills": [
+        "Appian platform",
+        "object-oriented programming",
+        "SQL",
+        "APIs",
+        "relational data modeling",
+        "Agile delivery",
+        "active Top Secret clearance"
+      ],
+      "years_experience_required": 1,
+      "experience_requirement": {
+        "minimum_years": 1.0,
+        "maximum_years": null,
+        "raw_text": "1+ year of software development or technical consulting"
+      },
+      "company_details": "Enterprise software company known for its low-code automation and process platform.\nIts consultants implement applications, data models, integrations and AI-enabled workflows.",
+      "url": "https://careers.appian.com/jobs/7837402-consultant--top-secret-clearance--software-implementatio",
+      "requirements": [
+        "Appian platform",
+        "object-oriented programming",
+        "SQL",
+        "APIs",
+        "relational data modeling",
+        "Agile delivery",
+        "active Top Secret clearance"
+      ],
+      "salary_min": null,
+      "salary_max": null,
+      "source": "https://careers.appian.com/jobs/7837402-consultant--top-secret-clearance--software-implementatio"
+    },
+    "reasons": [
+      "Title 'Consultant (Top Secret Clearance, Software Implementation)' does not align with the candidate's target titles (AI Engineer, Machine Learning Engineer, Computer Vision Engineer, Generative AI Engineer, MLOps Engineer)."
+    ]
+  },
+  {
+    "job": {
+      "job_id": "J016",
+      "title": "Data Scientist II",
+      "company": "Generac",
+      "industry_domain": "Energy Technology / Data Science",
+      "location": "Waukesha, WI",
+      "remote": null,
+      "description": "• Develop data-science solutions for energy products and operations.\n• Prepare and analyze structured business or product data.\n• Apply machine-learning and data-mining techniques.\n• Build repeatable analysis and modeling code in Python.\n• Query and transform data using SQL.\n• Use source control in a collaborative engineering environment.\n• Evaluate model results and communicate findings.\n• Work with product and engineering stakeholders.\n• Hold a bachelor's degree in a relevant quantitative field.\n• Bring at least two years of post-graduate data-science or ML experience.",
+      "required_skills": [
+        "Python",
+        "SQL",
+        "Git",
+        "machine learning",
+        "data mining",
+        "statistical modeling"
+      ],
+      "years_experience_required": 2,
+      "experience_requirement": {
+        "minimum_years": 2.0,
+        "maximum_years": null,
+        "raw_text": "2+ years post-graduate in data science or machine learning"
+      },
+      "company_details": "Energy-technology company producing generators, storage and connected energy solutions.\nIts data teams apply analytics and machine learning to products and operations.",
+      "url": "https://careers.generac.com/de/jobs/jr13572/data-scientist-ii/",
+      "requirements": [
+        "Python",
+        "SQL",
+        "Git",
+        "machine learning",
+        "data mining",
+        "statistical modeling"
+      ],
+      "salary_min": null,
+      "salary_max": null,
+      "source": "https://careers.generac.com/de/jobs/jr13572/data-scientist-ii/"
+    },
+    "reasons": [
+      "Location 'Waukesha, WI' is outside the preferred locations (Houston, TX, Remote, US, Washington, DC, Arlington, VA, Baltimore, MD, New York, NY, San Francisco, CA, Boston, MA)."
+    ]
+  },
+  {
+    "job": {
+      "job_id": "J021",
+      "title": "Data Scientist II",
+      "company": "Lennar",
+      "industry_domain": "Real Estate / Applied AI",
+      "location": "Miami, FL",
+      "remote": null,
+      "description": "• Build and refine predictive and analytical models.\n• Work with structured and unstructured data.\n• Develop AI agents and analytical pipelines.\n• Prepare, clean and integrate data from multiple sources.\n• Partner with engineering teams to deploy models.\n• Measure, monitor and improve model and business outcomes.\n• Collaborate with cross-functional stakeholders.\n• Communicate technical concepts to analysts and business users.\n• Bring strong SQL experience and exposure to AI or machine learning.\n• Bring at least three years applying data science to business problems.",
+      "required_skills": [
+        "Python",
+        "SQL",
+        "predictive modeling",
+        "NLP",
+        "AI agents",
+        "data preparation",
+        "experimentation"
+      ],
+      "years_experience_required": 3,
+      "experience_requirement": {
+        "minimum_years": 3.0,
+        "maximum_years": null,
+        "raw_text": "3+ years applying data science to business problems"
+      },
+      "company_details": "Major U.S. homebuilder and real-estate company.\nIts Applied AI and Data Science teams build analytics, ML products and production platforms.",
+      "url": "https://careers.lennar.com/job/663/data_scientist_ii",
+      "requirements": [
+        "Python",
+        "SQL",
+        "predictive modeling",
+        "NLP",
+        "AI agents",
+        "data preparation",
+        "experimentation"
+      ],
+      "salary_min": null,
+      "salary_max": null,
+      "source": "https://careers.lennar.com/job/663/data_scientist_ii"
+    },
+    "reasons": [
+      "Location 'Miami, FL' is outside the preferred locations (Houston, TX, Remote, US, Washington, DC, Arlington, VA, Baltimore, MD, New York, NY, San Francisco, CA, Boston, MA)."
+    ]
+  },
+  {
+    "job": {
+      "job_id": "J025",
+      "title": "Senior Database Engineer",
+      "company": "DataRobot",
+      "industry_domain": "Enterprise AI / Data Infrastructure",
+      "location": "Lviv, Ukraine or Kyiv, Ukraine",
+      "remote": null,
+      "description": "• Operate and improve large-scale database systems supporting an AI platform.\n• Design resilient, scalable data-storage architectures.\n• Monitor database health, capacity and performance.\n• Automate operational tasks and deployment workflows.\n• Tune queries, indexes and storage configurations.\n• Troubleshoot complex production incidents.\n• Partner with platform, security and application teams.\n• Document operational standards and recovery procedures.\n• Bring strong cloud and distributed-systems knowledge.\n• Bring at least four years managing large-scale databases.",
+      "required_skills": [
+        "Distributed databases",
+        "cloud infrastructure",
+        "performance tuning",
+        "reliability",
+        "automation",
+        "data platforms"
+      ],
+      "years_experience_required": 4,
+      "experience_requirement": {
+        "minimum_years": 4.0,
+        "maximum_years": null,
+        "raw_text": "4+ years managing large-scale database systems"
+      },
+      "company_details": "Enterprise AI company providing platforms for developing, deploying and governing AI models.\nIts engineering organization operates large-scale cloud and data systems.",
+      "url": "https://www.datarobot.com/careers/open-positions/job/102569/",
+      "requirements": [
+        "Distributed databases",
+        "cloud infrastructure",
+        "performance tuning",
+        "reliability",
+        "automation",
+        "data platforms"
+      ],
+      "salary_min": null,
+      "salary_max": null,
+      "source": "https://www.datarobot.com/careers/open-positions/job/102569/"
+    },
+    "reasons": [
+      "Location 'Lviv, Ukraine or Kyiv, Ukraine' is outside the preferred locations (Houston, TX, Remote, US, Washington, DC, Arlington, VA, Baltimore, MD, New York, NY, San Francisco, CA, Boston, MA).",
+      "Title 'Senior Database Engineer' does not align with the candidate's target titles (AI Engineer, Machine Learning Engineer, Computer Vision Engineer, Generative AI Engineer, MLOps Engineer)."
+    ]
+  },
+  {
+    "job": {
+      "job_id": "J027",
+      "title": "Sr. AI Engineer - Promo Optimisation",
+      "company": "Target",
+      "industry_domain": "Retail / Pricing and Promotion AI",
+      "location": "Bengaluru, India",
+      "remote": null,
+      "description": "• Build AI and optimization systems for retail promotions.\n• Develop production-quality Python services and model workflows.\n• Work across ML engineering, data engineering and MLOps.\n• Translate merchandising problems into technical solutions.\n• Create modular, testable and maintainable code.\n• Deploy and monitor production ML systems.\n• Collaborate with data scientists, engineers and business teams.\n• Improve performance, reliability and operational quality.\n• Hold a relevant technical degree or equivalent experience.\n• Bring at least four years in software, AI, ML, data or MLOps engineering.",
+      "required_skills": [
+        "Python",
+        "production ML",
+        "MLOps",
+        "data engineering",
+        "optimization",
+        "testing",
+        "software design"
+      ],
+      "years_experience_required": 4,
+      "experience_requirement": {
+        "minimum_years": 4.0,
+        "maximum_years": null,
+        "raw_text": "4+ years"
+      },
+      "company_details": "Large U.S. retailer operating stores and digital-commerce platforms.\nIts technology organization builds production AI, optimization, search and recommendation systems.",
+      "url": "https://corporate.target.com/jobs/w23/83/sr-ai-engineer-promo-optimisation",
+      "requirements": [
+        "Python",
+        "production ML",
+        "MLOps",
+        "data engineering",
+        "optimization",
+        "testing",
+        "software design"
+      ],
+      "salary_min": null,
+      "salary_max": null,
+      "source": "https://corporate.target.com/jobs/w23/83/sr-ai-engineer-promo-optimisation"
+    },
+    "reasons": [
+      "Location 'Bengaluru, India' is outside the preferred locations (Houston, TX, Remote, US, Washington, DC, Arlington, VA, Baltimore, MD, New York, NY, San Francisco, CA, Boston, MA)."
+    ]
+  },
+  {
+    "job": {
+      "job_id": "J029",
+      "title": "AI Engineer",
+      "company": "Chickasaw Nation Industries",
+      "industry_domain": "Federal Services / Enterprise AI",
+      "location": "United States",
+      "remote": null,
+      "description": "• Design and implement AI-enabled enterprise software.\n• Integrate models and intelligent services with applications.\n• Build maintainable backend services and APIs.\n• Support secure cloud or client-hosted deployments.\n• Translate client requirements into technical architecture.\n• Test, document and troubleshoot software solutions.\n• Collaborate with government and engineering stakeholders.\n• Apply modern software-development and deployment practices.\n• Meet any customer security or access requirements.\n• Bring at least five years of software-implementation experience.",
+      "required_skills": [
+        "Software implementation",
+        "Python",
+        "AI engineering",
+        "cloud",
+        "APIs",
+        "secure systems"
+      ],
+      "years_experience_required": 5,
+      "experience_requirement": {
+        "minimum_years": 5.0,
+        "maximum_years": null,
+        "raw_text": "5+ years in software implementation"
+      },
+      "company_details": "Federal contractor providing technology and professional services to government customers.\nIts engineering teams deliver secure enterprise software, data and AI capabilities.",
+      "url": "https://chickasaw.com/careers/211951",
+      "requirements": [
+        "Software implementation",
+        "Python",
+        "AI engineering",
+        "cloud",
+        "APIs",
+        "secure systems"
+      ],
+      "salary_min": null,
+      "salary_max": null,
+      "source": "https://chickasaw.com/careers/211951"
+    },
+    "reasons": [
+      "Role requires about 5+ years of experience; candidate has 4."
+    ]
+  },
+  {
+    "job": {
+      "job_id": "J030",
+      "title": "Senior Machine Learning Engineer - Disney Streaming",
+      "company": "Disney",
+      "industry_domain": "Media Streaming / Personalization",
+      "location": "New York, NY or Glendale, CA (On-site 4 days/week)",
+      "remote": false,
+      "description": "• Develop machine-learning models for streaming personalization.\n• Identify recommendation and product opportunities with stakeholders.\n• Perform large-scale data analysis and data engineering.\n• Write scalable production Python and SQL.\n• Develop algorithms for deployment to production systems.\n• Build and maintain ML and data pipelines.\n• Use technologies such as Spark, Databricks and cloud storage.\n• Measure model quality through experimentation and analysis.\n• Apply modern machine-learning and deep-learning methods.\n• Bring at least five years in ML modeling, data analysis or data engineering.",
+      "required_skills": [
+        "Python",
+        "SQL",
+        "Spark",
+        "Databricks",
+        "recommendation systems",
+        "deep learning",
+        "production ML"
+      ],
+      "years_experience_required": 5,
+      "experience_requirement": {
+        "minimum_years": 5.0,
+        "maximum_years": null,
+        "raw_text": "5+ years"
+      },
+      "company_details": "Global media and entertainment company operating streaming, studios, parks and consumer businesses.\nIts technology teams build personalization, advertising, measurement and content systems.",
+      "url": "https://jobs.disneycareers.com/job/new-york/senior-machine-learning-engineer-disney-streaming/391/91701032832",
+      "requirements": [
+        "Python",
+        "SQL",
+        "Spark",
+        "Databricks",
+        "recommendation systems",
+        "deep learning",
+        "production ML"
+      ],
+      "salary_min": null,
+      "salary_max": null,
+      "source": "https://jobs.disneycareers.com/job/new-york/senior-machine-learning-engineer-disney-streaming/391/91701032832"
+    },
+    "reasons": [
+      "Role requires about 5+ years of experience; candidate has 4."
+    ]
+  }
+]

@@ -1,0 +1,123 @@
+[
+  {
+    "change_id": "J028-summary",
+    "section": "summary",
+    "description": "Rewrote the summary for Generative AI Engineer.",
+    "before_text": "AI/ML engineer and Ph.D. researcher with 4+ years building production ML, generative-AI, and biomedical-vision systems. Delivered a 1.7M-record visual-QC workflow, 95\\% resume-parser accuracy, 80\\% job-matching success, and approximately 95\\% accuracy/F1 for real-time fall detection.",
+    "after_text": "Candidate targeting Generative AI Engineer roles with evidence-backed experience in Python, agentic AI, LLMs, NLP, and deep learning. Engineered an AI-powered customer relationship management platform to support sales prioritization and customer engagement.",
+    "reason": "Align the professional summary with the target role using only job-posting and candidate evidence.",
+    "evidence_ids": [
+      "job-J028-title",
+      "resume-skills-001",
+      "portfolio-P03",
+      "portfolio-P08",
+      "portfolio-P01",
+      "portfolio-P04",
+      "portfolio-P02"
+    ],
+    "source_location": "Professional Summary section",
+    "validation_result": "validated: source scope preserved and evidence confirmed"
+  },
+  {
+    "change_id": "J028-experience-1",
+    "section": "experience",
+    "description": "Rewrote existing experience bullet 1.",
+    "before_text": "Built a visual-QC workflow over 1.7M segmentation/tracking predictions; achieved 90.5\\% test accuracy and 0.764 F1 using out-of-fold evaluation and targeted error analysis.",
+    "after_text": "Highlighted relevant work that built a visual-QC workflow over 1.7M segmentation/tracking predictions; achieved 90.5\\% test accuracy and 0.764 F1 using out-of-fold evaluation and targeted error analysis.",
+    "reason": "Emphasize the existing experience most relevant to evidenced job requirements without changing its facts.",
+    "evidence_ids": [
+      "job-J028-title",
+      "resume-experience-001"
+    ],
+    "source_location": "Experience bullet 1",
+    "validation_result": "validated: source scope preserved and evidence confirmed"
+  },
+  {
+    "change_id": "J028-experience-2",
+    "section": "experience",
+    "description": "Rewrote existing experience bullet 2.",
+    "before_text": "Delivered an AI CRM and no-code LLM chatbot builder using predictive analytics, RAG, FastAPI, WebSocket, Docker, Kubernetes, and AWS SageMaker.",
+    "after_text": "Applied LLMs and model deployment through work that delivered an AI CRM and no-code LLM chatbot builder using predictive analytics, RAG, FastAPI, WebSocket, Docker, Kubernetes, and AWS SageMaker.",
+    "reason": "Emphasize the existing experience most relevant to evidenced job requirements without changing its facts.",
+    "evidence_ids": [
+      "job-J028-title",
+      "job-J028-skill-002",
+      "job-J028-skill-007",
+      "resume-experience-002"
+    ],
+    "source_location": "Experience bullet 2",
+    "validation_result": "validated: source scope preserved and evidence confirmed"
+  },
+  {
+    "change_id": "J028-skills-1",
+    "section": "skills",
+    "description": "Added evidenced skill: agentic AI.",
+    "before_text": "\\textbf{AI/ML:} Python, PyTorch, TensorFlow, Scikit-learn, OpenCV, Vision Transformers, EfficientNet, RAG, NLP, PaddleOCR",
+    "after_text": "\\textbf{AI/ML:} Python, PyTorch, TensorFlow, Scikit-learn, OpenCV, Vision Transformers, EfficientNet, RAG, NLP, PaddleOCR, agentic AI",
+    "reason": "Surface a job-relevant skill already supported by candidate evidence.",
+    "evidence_ids": [
+      "job-J028-skill-005",
+      "portfolio-P03"
+    ],
+    "source_location": "Skills item 1",
+    "validation_result": "validated: source scope preserved and evidence confirmed"
+  },
+  {
+    "change_id": "J028-skills-2",
+    "section": "skills",
+    "description": "Added evidenced skill: LLMs.",
+    "before_text": "\\textbf{AI/ML:} Python, PyTorch, TensorFlow, Scikit-learn, OpenCV, Vision Transformers, EfficientNet, RAG, NLP, PaddleOCR, agentic AI",
+    "after_text": "\\textbf{AI/ML:} Python, PyTorch, TensorFlow, Scikit-learn, OpenCV, Vision Transformers, EfficientNet, RAG, NLP, PaddleOCR, agentic AI, LLMs",
+    "reason": "Surface a job-relevant skill already supported by candidate evidence.",
+    "evidence_ids": [
+      "job-J028-skill-002",
+      "portfolio-P03"
+    ],
+    "source_location": "Skills item 1",
+    "validation_result": "validated: source scope preserved and evidence confirmed"
+  },
+  {
+    "change_id": "J028-skills-3",
+    "section": "skills",
+    "description": "Added evidenced skill: deep learning.",
+    "before_text": "\\textbf{AI/ML:} Python, PyTorch, TensorFlow, Scikit-learn, OpenCV, Vision Transformers, EfficientNet, RAG, NLP, PaddleOCR, agentic AI, LLMs",
+    "after_text": "\\textbf{AI/ML:} Python, PyTorch, TensorFlow, Scikit-learn, OpenCV, Vision Transformers, EfficientNet, RAG, NLP, PaddleOCR, agentic AI, LLMs, deep learning",
+    "reason": "Surface a job-relevant skill already supported by candidate evidence.",
+    "evidence_ids": [
+      "job-J028-skill-004",
+      "portfolio-P01",
+      "portfolio-P04"
+    ],
+    "source_location": "Skills item 1",
+    "validation_result": "validated: source scope preserved and evidence confirmed"
+  },
+  {
+    "change_id": "J028-skills-4",
+    "section": "skills",
+    "description": "Added evidenced skill: model deployment.",
+    "before_text": "\\textbf{AI/ML:} Python, PyTorch, TensorFlow, Scikit-learn, OpenCV, Vision Transformers, EfficientNet, RAG, NLP, PaddleOCR, agentic AI, LLMs, deep learning",
+    "after_text": "\\textbf{AI/ML:} Python, PyTorch, TensorFlow, Scikit-learn, OpenCV, Vision Transformers, EfficientNet, RAG, NLP, PaddleOCR, agentic AI, LLMs, deep learning, model deployment",
+    "reason": "Surface a job-relevant skill already supported by candidate evidence.",
+    "evidence_ids": [
+      "job-J028-skill-007",
+      "portfolio-P02",
+      "portfolio-P03"
+    ],
+    "source_location": "Skills item 1",
+    "validation_result": "validated: source scope preserved and evidence confirmed"
+  },
+  {
+    "change_id": "J028-project-swap",
+    "section": "projects",
+    "description": "Replaced \"Cardiovascular Flow and Stenosis Analysis\" with \"AI CRM Platform\".",
+    "before_text": "  \\resumeEntry{Cardiovascular Flow and Stenosis Analysis}{2023 -- 2024}\n    {PyTorch, R2U Attention, Vision Transformer, OpenCV, DICOM}{Medical Computer Vision}\n  \\resumeItemListStart\n    \\resumeItem{Combined vessel isolation, catheter exclusion, retrograde-flow detection, stenosis localization, flow-time estimation, and vessel-kink analysis.}\n  \\resumeItemListEnd",
+    "after_text": "  \\resumeEntry{AI CRM Platform}{2024-2025}\n    {Python, DeepInfra, FastAPI, Docker, Kubernetes, AWS SageMaker}{Predictive Analytics}\n  \\resumeItemListStart\n    \\resumeItem{Engineered an AI-powered customer relationship management platform to support sales prioritization and customer engagement.}\n  \\resumeItemListEnd",
+    "reason": "The AI CRM Platform provides stronger evidence of applied ML, predictive analytics, and cloud deployment (FastAPI, Docker, Kubernetes, AWS) which aligns better with the 'production software' and 'integrating AI services' requirements of the job.",
+    "evidence_ids": [
+      "job-J028-description",
+      "portfolio-P02"
+    ],
+    "source_location": "Projects entry \"Cardiovascular Flow and Stenosis Analysis\"",
+    "validation_result": "validated: source scope preserved and evidence confirmed"
+  }
+]

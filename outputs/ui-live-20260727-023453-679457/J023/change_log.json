@@ -1,0 +1,77 @@
+[
+  {
+    "change_id": "J023-summary",
+    "section": "summary",
+    "description": "Rewrote the summary for Computer Vision AI Engineer.",
+    "before_text": "AI/ML engineer and Ph.D. researcher with 4+ years building production ML, generative-AI, and biomedical-vision systems. Delivered a 1.7M-record visual-QC workflow, 95\\% resume-parser accuracy, 80\\% job-matching success, and approximately 95\\% accuracy/F1 for real-time fall detection.",
+    "after_text": "Candidate targeting Computer Vision AI Engineer roles with evidence-backed experience in Python, model deployment, Computer vision, and deep learning. Built a visual quality-control workflow that prioritizes likely failures among large-scale segmentation and tracking predictions instead of relying on exhaustive manual review.",
+    "reason": "Align the professional summary with the target role using only job-posting and candidate evidence.",
+    "evidence_ids": [
+      "job-J023-title",
+      "resume-skills-001",
+      "resume-experience-002",
+      "master-skills-001",
+      "portfolio-P01",
+      "portfolio-P07"
+    ],
+    "source_location": "Professional Summary section",
+    "validation_result": "validated: source scope preserved and evidence confirmed"
+  },
+  {
+    "change_id": "J023-experience-1",
+    "section": "experience",
+    "description": "Rewrote existing experience bullet 1.",
+    "before_text": "Built a visual-QC workflow over 1.7M segmentation/tracking predictions; achieved 90.5\\% test accuracy and 0.764 F1 using out-of-fold evaluation and targeted error analysis.",
+    "after_text": "Highlighted relevant work that built a visual-QC workflow over 1.7M segmentation/tracking predictions; achieved 90.5\\% test accuracy and 0.764 F1 using out-of-fold evaluation and targeted error analysis.",
+    "reason": "Emphasize the existing experience most relevant to evidenced job requirements without changing its facts.",
+    "evidence_ids": [
+      "job-J023-title",
+      "resume-experience-001"
+    ],
+    "source_location": "Experience bullet 1",
+    "validation_result": "validated: source scope preserved and evidence confirmed"
+  },
+  {
+    "change_id": "J023-experience-2",
+    "section": "experience",
+    "description": "Rewrote existing experience bullet 2.",
+    "before_text": "Delivered an AI CRM and no-code LLM chatbot builder using predictive analytics, RAG, FastAPI, WebSocket, Docker, Kubernetes, and AWS SageMaker.",
+    "after_text": "Applied model deployment through work that delivered an AI CRM and no-code LLM chatbot builder using predictive analytics, RAG, FastAPI, WebSocket, Docker, Kubernetes, and AWS SageMaker.",
+    "reason": "Emphasize the existing experience most relevant to evidenced job requirements without changing its facts.",
+    "evidence_ids": [
+      "job-J023-title",
+      "job-J023-skill-006",
+      "resume-experience-002"
+    ],
+    "source_location": "Experience bullet 2",
+    "validation_result": "validated: source scope preserved and evidence confirmed"
+  },
+  {
+    "change_id": "J023-skills-1",
+    "section": "skills",
+    "description": "Added evidenced skill: deep learning.",
+    "before_text": "\\textbf{AI/ML:} Python, PyTorch, TensorFlow, Scikit-learn, OpenCV, Vision Transformers, EfficientNet, RAG, NLP, PaddleOCR",
+    "after_text": "\\textbf{AI/ML:} Python, PyTorch, TensorFlow, Scikit-learn, OpenCV, Vision Transformers, EfficientNet, RAG, NLP, PaddleOCR, deep learning",
+    "reason": "Surface a job-relevant skill already supported by candidate evidence.",
+    "evidence_ids": [
+      "job-J023-skill-002",
+      "portfolio-P01"
+    ],
+    "source_location": "Skills item 1",
+    "validation_result": "validated: source scope preserved and evidence confirmed"
+  },
+  {
+    "change_id": "J023-project-swap",
+    "section": "projects",
+    "description": "Replaced \"No-Code LLM Chatbot Builder\" with \"Visual Quality-Control for Segmentation and Tracking\".",
+    "before_text": "  \\resumeEntry{No-Code LLM Chatbot Builder}{2025}\n    {DeepInfra/OpenAI, RAG, AutoGen, crawl4ai, FastAPI, WebSocket}{Generative AI}\n  \\resumeItemListStart\n    \\resumeItem{Converted website content into retrieval-ready knowledge and exposed context-aware assistants through reusable APIs and real-time channels.}\n  \\resumeItemListEnd\n\n\\resumeEntryListEnd\n\n%----------SKILLS----------",
+    "after_text": "  \\resumeEntry{Visual Quality-Control for Segmentation and Tracking}{2025-Present}\n    {Python, PyTorch, EfficientNet, Computer Vision, Out-of-Fold Evaluation, Statistical Error Analysis}{AI Research}\n  \\resumeItemListStart\n    \\resumeItem{Built a visual quality-control workflow that prioritizes likely failures among large-scale segmentation and tracking predictions instead of relying on exhaustive manual review.}\n  \\resumeItemListEnd\n\n\\resumeEntryListEnd\n\n%----------SKILLS----------",
+    "reason": "The 'No-Code LLM Chatbot Builder' project focuses on NLP and RAG, which is less relevant to this Computer Vision role. Replacing it with the 'Visual Quality-Control' project highlights the candidate's expertise in vision-based evaluation and tracking, which aligns better with the job requirements.",
+    "evidence_ids": [
+      "job-J023-description",
+      "portfolio-P01"
+    ],
+    "source_location": "Projects entry \"No-Code LLM Chatbot Builder\"",
+    "validation_result": "validated: source scope preserved and evidence confirmed"
+  }
+]
